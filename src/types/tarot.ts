@@ -56,13 +56,15 @@ export interface IChatMessage {
 export interface IInterpretationResult {
   /** 牌面总览 */
   overview: string;
+  /** 牌阵能量流动分析 */
+  energyFlow: string;
   /** 分牌详细解读 */
   cardDetails: ICardInterpretation[];
   /** 综合结论 */
   conclusion: string;
   /** 行动建议 */
   advice: string;
-  /** 追问对话历史 */
+  /** 追问对话历史 (已弃用，始终为空) */
   followUpChat: IChatMessage[];
 }
 

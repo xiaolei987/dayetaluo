@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { scopedStorage, logger } from '@lark-apaas/client-toolkit-lite';
 import SpreadLayoutSection from '@/pages/ResultPage/SpreadLayoutSection';
 import InterpretationSection from '@/pages/ResultPage/InterpretationSection';
-import FollowUpChatSection from '@/pages/ResultPage/FollowUpChatSection';
 import type { IReadingRecord, IInterpretationResult, IChatMessage } from '@/types/tarot';
 import type { ISpreadConfig } from '@/types/spread';
 import { MOCK_SPREADS } from '@/data/spreads';

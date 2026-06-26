@@ -1,14 +1,13 @@
 import { useState, useCallback, useRef, type FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, ChevronDown, ChevronUp, Send, Loader2, MessageCircle, Copy, Check } from 'lucide-react';
+import { Sparkles, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { callAiStream, hasAiConfig } from '@/lib/aiApi';
-import type { IInterpretationResult, IChatMessage, IDrawnCard } from '@/types/tarot';
+import type { IInterpretationResult, IDrawnCard } from '@/types/tarot';
 import type { ISpreadConfig } from '@/types/spread';
 import { MOCK_TAROT_CARDS } from '@/data/tarotCards';
 
@@ -56,12 +55,11 @@ export default function InterpretationSection({
   const [streamingContent, setStreamingContent] = useState('');
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     overview: true,
+    energyFlow: false,
     cardDetails: false,
     conclusion: false,
     advice: false,
   });
-  const [followUpInput, setFollowUpInput] = useState('');
-  const [isFollowUpLoading, setIsFollowUpLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -104,28 +102,43 @@ ${spread.positions.map((p) => `  ${p.index}. ${p.name}：${p.description}`).join
     const systemPrompt = `你是一位拥有10年实战经验的专业韦特塔罗解读师，深度研究荣格心理学与象征主义，擅长用温暖且有力量的语言解读牌面。
 
 解读原则：
-1. 严格基于提供的牌阵、每张牌的正逆位、牌阵位置含义进行解读，禁止凭空捏造。
+1. 严格基于提供的牌阵、每张牌的正逆位和牌阵中的具体位置含义进行解读，禁止凭空捏造。
 2. 不做绝对化的命运预言，强调人的主观能动性。
 3. 语言表达流畅自然，符合年轻女性用户的阅读习惯，语气温柔有共情力。
 4. 禁止涉及医疗、法律、投资等专业领域建议。
 
 请严格按以下 Markdown 格式输出：
 ## 牌面总览
+用一句话概括本次牌阵的核心主题与整体能量基调。
+
+## 能量流动
+分析每张牌在牌阵位置中的相互作用关系，描述能量如何在各牌位之间流转。例如：过去的牌如何影响现在，现在的势能如何指向未来；牌与牌之间是冲突、呼应还是递进关系。要结合具体的牌阵名称和位置含义来说明。
+
 ## 分牌详细解读
+按牌阵位置顺序逐一解读，每张牌必须明确标注【位置名称】和牌名，格式：
+**【位置名称】牌名 · 正/逆位**
+解读内容，结合位置含义与牌意进行分析。
+
 ## 综合结论
+整合所有牌面信息，给出核心洞察与整体趋势。
+
 ## 行动建议
+给出2-3条具体、可落地的行动建议。
+
 结尾附：💡 温馨提示：塔罗解读仅供娱乐与心理参考，最终选择权始终在你手中。`;
 
-    const userMessage = `解读风格：${styleLabel}
+    const userMessage = `本次使用的牌阵是「${spread.name}」，这是一个${spread.cardCount}张牌的牌阵，适用场景：${spread.scenario}。
+
+解读风格：${styleLabel}
 
 ${spreadInfo}
 
-抽到的牌面：
+抽到的牌面（每张牌已标注在牌阵中的具体位置和正逆位）：
 ${cardList}
 
 用户问题：${question || '请给我一个综合解读'}
 
-请基于以上信息进行专业解读。`;
+请基于以上信息进行专业解读，务必在牌阵整体语境下分析，不要孤立看待每张牌。`;
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -146,6 +159,7 @@ ${cardList}
         const parsed = parseInterpretationContent(fullContent);
         onInterpretationChange({
           overview: parsed.overview,
+          energyFlow: parsed.energyFlow,
           cardDetails: parsed.cardDetails,
           conclusion: parsed.conclusion,
           advice: parsed.advice,
@@ -163,59 +177,6 @@ ${cardList}
       abortRef.current = null;
     }
   }, [isGenerating, spread, drawnCards, question, style, onInterpretationChange]);
-
-  // ==================== 追问 ====================
-  const handleFollowUp = useCallback(
-    async (e: FormEvent) => {
-      e.preventDefault();
-      if (!followUpInput.trim() || isFollowUpLoading || !interpretation) return;
-      if (!hasAiConfig()) {
-        toast.error('请先在"我的-功能入口-AI接口"中配置 API');
-        return;
-      }
-
-      const userMsg: IChatMessage = {
-        role: 'user',
-        content: followUpInput.trim(),
-        timestamp: new Date().toISOString(),
-      };
-
-      setIsFollowUpLoading(true);
-      setFollowUpInput('');
-
-      const systemPrompt = `你是一位拥有10年实战经验的专业韦特塔罗解读师。用户之前完成了一次塔罗占卜并获得了AI解读，现在正在向你追问。请结合以下占卜背景和用户的追问问题，给出专业、温暖且有针对性的回答。`;
-
-      const contextMsg = `牌阵：${spread.name}
-用户问题：${question}
-牌面总览：${interpretation.overview}
-综合结论：${interpretation.conclusion}
-行动建议：${interpretation.advice}
-对话历史：
-${interpretation.followUpChat.map((m) => `${m.role === 'user' ? '用户' : '解读师'}：${m.content}`).join('\n')}
-
-用户的追问：${userMsg.content}`;
-
-      try {
-        const fullContent = await callAiStream(systemPrompt, contextMsg, () => {});
-
-        const assistantMsg: IChatMessage = {
-          role: 'assistant',
-          content: fullContent,
-          timestamp: new Date().toISOString(),
-        };
-
-        onInterpretationChange({
-          ...interpretation,
-          followUpChat: [...interpretation.followUpChat, userMsg, assistantMsg],
-        });
-      } catch {
-        toast.error('追问失败，请重试');
-      } finally {
-        setIsFollowUpLoading(false);
-      }
-    },
-    [followUpInput, isFollowUpLoading, interpretation, spread, question, onInterpretationChange],
-  );
 
   // ==================== 复制 ====================
   const handleCopy = useCallback(
@@ -238,6 +199,7 @@ ${interpretation.followUpChat.map((m) => `${m.role === 'user' ? '用户' : '解�
 
     const sections = [
       { key: 'overview', title: '🔮 牌面总览', content: interpretation.overview },
+      { key: 'energyFlow', title: '🌊 能量流动', content: interpretation.energyFlow },
       { key: 'cardDetails', title: '📜 分牌详细解读', content: interpretation.cardDetails },
       { key: 'conclusion', title: '✨ 综合结论', content: interpretation.conclusion },
       { key: 'advice', title: '💡 行动建议', content: interpretation.advice },
@@ -326,75 +288,12 @@ ${interpretation.followUpChat.map((m) => `${m.role === 'user' ? '用户' : '解�
           );
         })}
 
-        {/* 追问对话区 */}
+        {/* 温馨提示 */}
         <Card className="rounded-2xl border-border/40 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <MessageCircle className="size-4 text-primary" />
-              追问交流
-            </CardTitle>
-            <CardDescription className="text-xs">
-              对解读结果有疑问？继续和塔罗师深入交流
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {/* 对话历史 */}
-            {interpretation.followUpChat.length > 0 && (
-              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-                {interpretation.followUpChat.map((msg, mi) => (
-                  <div
-                    key={mi}
-                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                        msg.role === 'user'
-                          ? 'bg-primary text-primary-foreground rounded-br-md'
-                          : 'bg-muted text-foreground rounded-bl-md'
-                      }`}
-                    >
-                      {msg.content}
-                    </div>
-                  </div>
-                ))}
-                {isFollowUpLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
-                      <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 追问输入 */}
-            <form onSubmit={handleFollowUp} className="flex gap-2">
-              <Textarea
-                value={followUpInput}
-                onChange={(e) => setFollowUpInput(e.target.value)}
-                placeholder="输入你的追问..."
-                className="min-h-10 h-10 resize-none rounded-xl text-sm"
-                rows={1}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleFollowUp(e);
-                  }
-                }}
-              />
-              <Button
-                type="submit"
-                size="icon"
-                disabled={!followUpInput.trim() || isFollowUpLoading}
-                className="shrink-0 size-10 rounded-xl"
-              >
-                {isFollowUpLoading ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Send className="size-4" />
-                )}
-              </Button>
-            </form>
+          <CardContent className="p-4 text-center">
+            <p className="text-xs text-muted-foreground">
+              💡 塔罗解读仅供娱乐与心理参考，最终选择权始终在你手中。
+            </p>
           </CardContent>
         </Card>
       </motion.div>
@@ -532,11 +431,13 @@ ${interpretation.followUpChat.map((m) => `${m.role === 'user' ? '用户' : '解�
 /** 解析流式输出的结构化解读内容 */
 function parseInterpretationContent(raw: string): {
   overview: string;
+  energyFlow: string;
   cardDetails: IInterpretationResult['cardDetails'];
   conclusion: string;
   advice: string;
 } {
   const overview = extractSection(raw, ['牌面总览', '1.', '一、']);
+  const energyFlow = extractSection(raw, ['能量流动']);
   const cardDetailsRaw = extractSection(raw, ['分牌解读', '分牌详细解读', '2.', '二、']);
   const conclusion = extractSection(raw, ['综合结论', '3.', '三、']);
   const advice = extractSection(raw, ['行动建议', '4.', '四、']);
@@ -567,6 +468,7 @@ function parseInterpretationContent(raw: string): {
 
   return {
     overview: overview || '解读生成中，请稍候...',
+    energyFlow: energyFlow || '解读生成中，请稍候...',
     cardDetails,
     conclusion: conclusion || '解读生成中，请稍候...',
     advice: advice || '解读生成中，请稍候...',
@@ -586,7 +488,7 @@ function extractSection(raw: string, markers: string[]): string {
     }
 
     // 找下一个章节标记
-    const nextMarkers = ['牌面总览', '分牌解读', '分牌详细解读', '综合结论', '行动建议', '1.', '2.', '3.', '4.', '一、', '二、', '三、', '四、'];
+    const nextMarkers = ['牌面总览', '能量流动', '分牌解读', '分牌详细解读', '综合结论', '行动建议', '1.', '2.', '3.', '4.', '一、', '二、', '三、', '四、'];
     let end = raw.length;
     for (const nm of nextMarkers) {
       const ni = raw.indexOf(nm, start);
