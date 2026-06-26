@@ -453,11 +453,11 @@ function parseInterpretationContent(raw: string): {
   conclusion: string;
   advice: string;
 } {
-  const overview = extractSection(raw, ['牌面总览', '1.', '一、']);
+  const overview = extractSection(raw, ['牌面总览']);
   const energyFlow = extractSection(raw, ['能量流动']);
-  const cardDetailsRaw = extractSection(raw, ['分牌解读', '分牌详细解读', '2.', '二、']);
-  const conclusion = extractSection(raw, ['综合结论', '3.', '三、']);
-  const advice = extractSection(raw, ['行动建议', '4.', '四、']);
+  const cardDetailsRaw = extractSection(raw, ['分牌详细解读', '分牌解读']);
+  const conclusion = extractSection(raw, ['综合结论']);
+  const advice = extractSection(raw, ['行动建议']);
 
   // 解析分牌解读为结构化数组
   const cardDetails: IInterpretationResult['cardDetails'] = [];
@@ -473,13 +473,8 @@ function parseInterpretationContent(raw: string): {
         });
       }
     }
-    // 如果正则没匹配到，整段作为一个
     if (cardDetails.length === 0 && cardDetailsRaw.trim()) {
-      cardDetails.push({
-        cardId: '',
-        positionName: '综合',
-        content: cardDetailsRaw.trim(),
-      });
+      cardDetails.push({ cardId: '', positionName: '综合', content: cardDetailsRaw.trim() });
     }
   }
 
@@ -495,29 +490,44 @@ function parseInterpretationContent(raw: string): {
 /** 从原始文本中提取指定章节 */
 function extractSection(raw: string, markers: string[]): string {
   for (const marker of markers) {
-    const idx = raw.indexOf(marker);
-    if (idx === -1) continue;
+    // 匹配 ## 或 ### 或 ** 开头的章节标题
+    const patterns = [
+      new RegExp(`#{1,3}\\s*${escapeRegex(marker)}`, 'i'),
+      new RegExp(`\\*\\*${escapeRegex(marker)}\\*\\*`, 'i'),
+      new RegExp(escapeRegex(marker), 'i'),
+    ];
 
-    let start = idx + marker.length;
-    // 跳过冒号或换行
-    while (start < raw.length && (raw[start] === '：' || raw[start] === ':' || raw[start] === '\n')) {
-      start++;
-    }
+    for (const pattern of patterns) {
+      const match = pattern.exec(raw);
+      if (!match) continue;
 
-    // 找下一个章节标记
-    const nextMarkers = ['牌面总览', '能量流动', '分牌解读', '分牌详细解读', '综合结论', '行动建议', '1.', '2.', '3.', '4.', '一、', '二、', '三、', '四、'];
-    let end = raw.length;
-    for (const nm of nextMarkers) {
-      const ni = raw.indexOf(nm, start);
-      if (ni !== -1 && ni < end) {
-        end = ni;
+      const startIdx = match.index + match[0].length;
+      // 跳到实际内容开始（跳过冒号、空格、换行）
+      let start = startIdx;
+      while (start < raw.length && /[：:\s\n]/.test(raw[start])) start++;
+
+      // 找下一个章节标题作为结束
+      const nextPattern = /(?:#{1,3}\s*|\*\*)([^\n*]+?)(?:\*\*)?\s*\n/gi;
+      nextPattern.lastIndex = start;
+      let end = raw.length;
+      let m: RegExpExecArray | null;
+      while ((m = nextPattern.exec(raw)) !== null) {
+        const title = m[1].trim();
+        // 检查是否是已知的章节标题
+        const allMarkers = ['牌面总览', '能量流动', '分牌详细解读', '分牌解读', '综合结论', '行动建议'];
+        if (allMarkers.some(am => title.includes(am))) {
+          end = m.index;
+          break;
+        }
       }
+
+      const result = raw.slice(start, end).trim();
+      if (result) return result;
     }
-
-    const result = raw.slice(start, end).trim();
-    if (result) return result;
   }
-
-  // 如果所有标记都没找到，返回原始内容的前半部分作为 overview
   return '';
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
