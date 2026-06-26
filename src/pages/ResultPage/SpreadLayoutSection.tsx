@@ -35,7 +35,7 @@ export default function SpreadLayoutSection({ spread, drawnCards }: SpreadLayout
         </div>
 
         {/* 牌阵布局区 */}
-        <div className="relative w-full aspect-[4/3] md:aspect-[16/10] bg-gradient-to-br from-primary/5 via-background to-accent/10 rounded-2xl border border-border/40 overflow-hidden">
+        <div className="relative w-full aspect-[3/4] sm:aspect-[4/3] md:aspect-[16/10] bg-gradient-to-br from-primary/5 via-background to-accent/10 rounded-2xl border border-border/40 overflow-hidden">
           {/* 连接线 (桌面端) */}
           <svg
             className="absolute inset-0 w-full h-full pointer-events-none hidden md:block"
@@ -78,15 +78,15 @@ export default function SpreadLayoutSection({ spread, drawnCards }: SpreadLayout
                 style={{
                   left: `${pos.x}%`,
                   top: `${pos.y}%`,
-                  transform: 'translate(-50%, -50%)',
+                  transform: 'translate(-50%, calc(-50% - 6px))',
                 }}
                 onClick={() => setSelectedCardId(card.cardId)}
               >
                   {/* 卡牌卡片 */}
                   <div
                     className={`
-                      w-20 h-32 md:w-24 md:h-36 rounded-xl border-2 shadow-md
-                      overflow-hidden
+                      w-14 h-22 xs:w-16 xs:h-24 sm:w-20 sm:h-32 md:w-24 md:h-36 rounded-lg sm:rounded-xl border-2 shadow-md
+                      overflow-hidden flex-shrink-0
                       transition-all duration-300
                       group-hover:shadow-lg group-hover:scale-105
                       ${card.isReversed ? 'rotate-180 border-warning/40' : 'border-primary/20'}
@@ -100,7 +100,7 @@ export default function SpreadLayoutSection({ spread, drawnCards }: SpreadLayout
                       />
                     ) : (
                       <div className={`w-full h-full flex items-center justify-center ${card.isReversed ? 'bg-warning/10' : 'bg-card'}`}>
-                        <span className="text-xs font-medium text-center leading-tight">
+                        <span className="text-[8px] sm:text-xs font-medium text-center leading-tight px-0.5">
                           {cardData.nameCn}
                         </span>
                       </div>
@@ -108,24 +108,24 @@ export default function SpreadLayoutSection({ spread, drawnCards }: SpreadLayout
                   </div>
 
                   {/* 牌名 - 始终正向 */}
-                  <p className="text-[10px] font-medium text-foreground text-center leading-tight max-w-[96px]">
+                  <p className="text-[9px] sm:text-[10px] md:text-xs font-medium text-foreground text-center leading-tight max-w-[56px] xs:max-w-[64px] sm:max-w-[80px] md:max-w-[96px] truncate">
                     {cardData.nameCn}
                   </p>
 
                   {/* 正逆位标识 - 始终正向 */}
                   <Badge
                     variant="outline"
-                    className={`text-[10px] px-1 py-0 h-4 ${
+                    className={`text-[8px] sm:text-[10px] px-1 py-0 h-3 sm:h-4 leading-none ${
                       card.isReversed
                         ? 'border-warning/40 text-warning bg-warning/5'
                         : 'border-success/40 text-success bg-success/5'
                     }`}
                   >
-                    {card.isReversed ? '逆位' : '正位'}
+                    {card.isReversed ? '逆' : '正'}
                   </Badge>
 
-                  {/* 位置标签 */}
-                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                  {/* 位置标签 - 小屏隐藏 */}
+                  <span className="hidden sm:inline text-[10px] text-muted-foreground whitespace-nowrap">
                     {pos.name}
                   </span>
                 </motion.div>
