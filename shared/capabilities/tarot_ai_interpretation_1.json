@@ -1,0 +1,45 @@
+{
+  "id": "tarot_ai_interpretation_1",
+  "pluginKey": "@official-plugins/ai-text-generate",
+  "pluginVersion": "1.0.17",
+  "name": "塔罗AI解读",
+  "description": "基于塔罗牌阵、卡牌信息和用户问题，生成结构化的塔罗解读文本，包含牌面总览、分牌解读、综合结论和行动建议",
+  "icon": "",
+  "paramsSchema": {
+    "type": "object",
+    "properties": {
+      "spread_info": {
+        "description": "塔罗牌阵信息，包含牌阵名称、牌位数量、每个牌位的含义",
+        "type": "string"
+      },
+      "card_list": {
+        "description": "卡牌列表，包含每张卡牌的名称、正逆位信息和对应的牌位",
+        "type": "string"
+      },
+      "user_question": {
+        "type": "string",
+        "description": "用户提出的问题，需要解读的具体内容"
+      },
+      "interpretation_style": {
+        "type": "string",
+        "description": "解读风格，如：专业严谨、轻松幽默、温暖治愈、简洁明了等"
+      }
+    },
+    "required": [
+      "spread_info",
+      "card_list",
+      "user_question"
+    ]
+  },
+  "formValue": {
+    "modelParams": {
+      "temperature": 0.5,
+      "maxTokens": 8192
+    },
+    "prompt": "你是一位专业的塔罗牌解读师，拥有丰富的塔罗知识和解读经验，能够根据牌阵、卡牌信息和用户问题提供准确、有建设性的解读。\n\n请根据以下信息进行塔罗牌解读：\n\n【牌阵信息】\n{{input.spread_info}}\n\n【抽取的卡牌】\n{{input.card_list}}\n\n【用户问题】\n{{input.user_question}}\n\n【解读风格要求】\n{{input.interpretation_style}}\n\n解读内容需要包含以下四个部分，结构清晰：\n\n1. 牌面总览\n   - 整体概括牌阵的核心能量和主要趋势\n   - 点明牌面与用户问题的关联性\n   - 给出整体的基调判断\n\n2. 分牌解读\n   - 按照牌位顺序逐一解读每张卡牌的含义\n   - 结合正逆位和对应牌位的意义进行分析\n   - 说明每张牌在当前问题中的具体指向\n\n3. 综合结论\n   - 整合所有卡牌的信息，给出综合判断\n   - 分析问题的核心矛盾和潜在影响因素\n   - 揭示事情发展的可能趋势和结果\n\n4. 行动建议\n   - 根据解读结果给出具体、可操作的建议\n   - 针对问题提供建设性的解决方案\n   - 帮助用户更好地应对当前的状况\n\n解读要求：\n- 内容准确客观，符合塔罗牌的传统含义\n- 语言流畅易懂，避免过于晦涩的术语\n- 保持中立和建设性的态度，不传播负面情绪\n- 尊重用户的感受，提供有价值的参考信息\n- 如果信息不足，请明确说明无法准确解读的部分",
+    "modelID": "87"
+  },
+  "createdAt": 1782438056885,
+  "updatedAt": 1782438056885,
+  "createdBy": 7582008410883754937
+}
