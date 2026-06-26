@@ -16,8 +16,8 @@ export interface AiConfig {
 }
 
 const DEFAULT_CONFIG: AiConfig = {
-  apiUrl: 'https://api.openai.com/v1/chat/completions',
-  model: 'gpt-4o-mini',
+  apiUrl: 'https://api.deepseek.com/v1/chat/completions',
+  model: 'deepseek-chat',
   apiKey: '',
 };
 

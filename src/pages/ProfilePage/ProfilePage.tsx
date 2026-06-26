@@ -326,7 +326,7 @@ export default function ProfilePage() {
                           <Input
                             value={aiConfig.apiUrl}
                             onChange={(e) => setAiConfig({ ...aiConfig, apiUrl: e.target.value })}
-                            placeholder="https://api.openai.com/v1/chat/completions"
+                            placeholder="https://api.deepseek.com/v1/chat/completions"
                             className="rounded-xl text-sm"
                           />
                           <p className="text-[11px] text-muted-foreground">OpenAI 兼容的 Chat Completions 端点</p>
