@@ -57,28 +57,46 @@ export async function callAiStream(
 ): Promise<string> {
   const config = getAiConfig();
 
-  const response = await fetch(config.apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-      stream: true,
-      temperature: 0.7,
-      max_tokens: 2048,
-    }),
-    signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(config.apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        stream: true,
+        temperature: 0.7,
+        max_tokens: 2048,
+      }),
+      signal,
+    });
+  } catch (err: unknown) {
+    if (err instanceof TypeError && err.message.includes('fetch')) {
+      throw new Error('网络连接失败，请检查 API 地址是否正确或网络是否可达');
+    }
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error('请求已取消');
+    }
+    throw new Error(`API 请求失败：${err instanceof Error ? err.message : '未知错误'}`);
+  }
 
   if (!response.ok) {
-    const errText = await response.text().catch(() => '');
-    throw new Error(`AI API 错误 (${response.status}): ${errText.slice(0, 200)}`);
+    let errText = '';
+    try { errText = await response.text(); } catch { /* ignore */ }
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('API 密钥无效或无权访问，请检查 AI 接口配置');
+    }
+    if (response.status === 404) {
+      throw new Error('API 地址不存在 (404)，请检查请求地址是否正确');
+    }
+    throw new Error(`AI 服务返回错误 (${response.status})：${errText.slice(0, 150)}`);
   }
 
   const reader = response.body?.getReader();

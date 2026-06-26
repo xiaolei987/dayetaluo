@@ -309,16 +309,33 @@ ${cardList}
         animate={{ opacity: 1, y: 0 }}
         className="space-y-4"
       >
-        <Card className="rounded-2xl border-primary/20 shadow-sm bg-primary/5">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Loader2 className="size-4 animate-spin text-primary" />
-              <span className="text-sm font-medium text-primary">AI 正在为你解读...</span>
+        <Card className="rounded-2xl border-primary/30 shadow-md bg-primary/5">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <div>
+                <span className="text-sm font-semibold text-primary">
+                  AI 正在为你解读...
+                </span>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {streamingContent ? '正在生成内容...' : '正在连接 AI 服务...'}
+                </p>
+              </div>
             </div>
-            {streamingContent && (
-              <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
-                {streamingContent}
-              </p>
+            {streamingContent ? (
+              <div className="p-4 rounded-xl bg-background/60 border border-primary/10">
+                <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">
+                  {streamingContent}
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center py-8">
+                <div className="flex gap-1">
+                  <div className="size-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="size-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="size-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
