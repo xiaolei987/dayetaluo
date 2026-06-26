@@ -7,9 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { capabilityClient } from '@lark-apaas/client-toolkit-lite';
-import type { TarotAiInterpretationOneInput, TarotAiInterpretationOneOutput } from '@shared/plugin-types';
-import type { TarotFollowUpChatOneInput, TarotFollowUpChatOneOutput } from '@shared/plugin-types';
+import { callAiStream, hasAiConfig } from '@/lib/aiApi';
 import type { IInterpretationResult, IChatMessage, IDrawnCard } from '@/types/tarot';
 import type { ISpreadConfig } from '@/types/spread';
 import { MOCK_TAROT_CARDS } from '@/data/tarotCards';
@@ -75,6 +73,10 @@ export default function InterpretationSection({
   // ==================== 生成解读 ====================
   const handleGenerate = useCallback(async () => {
     if (isGenerating) return;
+    if (!hasAiConfig()) {
+      toast.error('请先在"我的-功能入口-AI接口"中配置 API');
+      return;
+    }
     setIsGenerating(true);
     setStreamingContent('');
 
@@ -99,30 +101,48 @@ ${spread.positions.map((p) => `  ${p.index}. ${p.name}：${p.description}`).join
 
     const styleLabel = STYLE_LABEL_MAP[style];
 
-    const input: TarotAiInterpretationOneInput = {
-      spread_info: spreadInfo,
-      card_list: cardList,
-      user_question: question || '请给我一个综合解读',
-      interpretation_style: styleLabel,
-    };
+    const systemPrompt = `你是一位拥有10年实战经验的专业韦特塔罗解读师，深度研究荣格心理学与象征主义，擅长用温暖且有力量的语言解读牌面。
+
+解读原则：
+1. 严格基于提供的牌阵、每张牌的正逆位、牌阵位置含义进行解读，禁止凭空捏造。
+2. 不做绝对化的命运预言，强调人的主观能动性。
+3. 语言表达流畅自然，符合年轻女性用户的阅读习惯，语气温柔有共情力。
+4. 禁止涉及医疗、法律、投资等专业领域建议。
+
+请严格按以下 Markdown 格式输出：
+## 牌面总览
+## 分牌详细解读
+## 综合结论
+## 行动建议
+结尾附：💡 温馨提示：塔罗解读仅供娱乐与心理参考，最终选择权始终在你手中。`;
+
+    const userMessage = `解读风格：${styleLabel}
+
+${spreadInfo}
+
+抽到的牌面：
+${cardList}
+
+用户问题：${question || '请给我一个综合解读'}
+
+请基于以上信息进行专业解读。`;
 
     const controller = new AbortController();
     abortRef.current = controller;
 
     try {
       let fullContent = '';
-      const stream = capabilityClient
-        .load('tarot_ai_interpretation_1')
-        .callStream<TarotAiInterpretationOneOutput>('textGenerate', input);
-
-      for await (const chunk of stream) {
-        if (controller.signal.aborted) break;
-        fullContent += chunk.content;
-        setStreamingContent(fullContent);
-      }
+      await callAiStream(
+        systemPrompt,
+        userMessage,
+        (chunk) => {
+          fullContent += chunk;
+          setStreamingContent(fullContent);
+        },
+        controller.signal,
+      );
 
       if (!controller.signal.aborted) {
-        // 解析结构化内容
         const parsed = parseInterpretationContent(fullContent);
         onInterpretationChange({
           overview: parsed.overview,
@@ -132,9 +152,10 @@ ${spread.positions.map((p) => `  ${p.index}. ${p.name}：${p.description}`).join
           followUpChat: [],
         });
       }
-    } catch (err) {
+    } catch (err: unknown) {
       if (!controller.signal.aborted) {
-        toast.error('解读生成失败，请重试');
+        const msg = err instanceof Error ? err.message : '解读生成失败';
+        toast.error(msg);
       }
     } finally {
       setIsGenerating(false);
@@ -148,6 +169,10 @@ ${spread.positions.map((p) => `  ${p.index}. ${p.name}：${p.description}`).join
     async (e: FormEvent) => {
       e.preventDefault();
       if (!followUpInput.trim() || isFollowUpLoading || !interpretation) return;
+      if (!hasAiConfig()) {
+        toast.error('请先在"我的-功能入口-AI接口"中配置 API');
+        return;
+      }
 
       const userMsg: IChatMessage = {
         role: 'user',
@@ -158,29 +183,20 @@ ${spread.positions.map((p) => `  ${p.index}. ${p.name}：${p.description}`).join
       setIsFollowUpLoading(true);
       setFollowUpInput('');
 
-      // 构建历史上下文
-      const historyContext = `牌阵：${spread.name}
+      const systemPrompt = `你是一位拥有10年实战经验的专业韦特塔罗解读师。用户之前完成了一次塔罗占卜并获得了AI解读，现在正在向你追问。请结合以下占卜背景和用户的追问问题，给出专业、温暖且有针对性的回答。`;
+
+      const contextMsg = `牌阵：${spread.name}
 用户问题：${question}
 牌面总览：${interpretation.overview}
 综合结论：${interpretation.conclusion}
 行动建议：${interpretation.advice}
 对话历史：
-${interpretation.followUpChat.map((m) => `${m.role === 'user' ? '用户' : '解读师'}：${m.content}`).join('\n')}`;
+${interpretation.followUpChat.map((m) => `${m.role === 'user' ? '用户' : '解读师'}：${m.content}`).join('\n')}
 
-      const input: TarotFollowUpChatOneInput = {
-        history_context: historyContext,
-        user_question: userMsg.content,
-      };
+用户的追问：${userMsg.content}`;
 
       try {
-        let fullContent = '';
-        const stream = capabilityClient
-          .load('tarot_follow_up_chat_1')
-          .callStream<TarotFollowUpChatOneOutput>('textGenerate', input);
-
-        for await (const chunk of stream) {
-          fullContent += chunk.content;
-        }
+        const fullContent = await callAiStream(systemPrompt, contextMsg, () => {});
 
         const assistantMsg: IChatMessage = {
           role: 'assistant',

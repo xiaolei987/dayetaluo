@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { User, Settings, Info, Heart, Sparkles, Edit3, Check, X, Star, ChevronRight, Clock, Trash2 } from 'lucide-react';
+import { User, Settings, Info, Heart, Sparkles, Edit3, Check, X, Star, ChevronRight, Clock, Trash2, Bot } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +19,7 @@ import {
 import { scopedStorage } from '@lark-apaas/client-toolkit-lite';
 import type { IUserProfile, IReadingRecord } from '@/types/tarot';
 import { Image } from '@/components/ui/image';
+import { getAiConfig, saveAiConfig, hasAiConfig, type AiConfig } from '@/lib/aiApi';
 
 const STORAGE_KEY_PROFILE = '__tarot_userProfile';
 const STORAGE_KEY_READINGS = '__tarot_readings';
@@ -81,6 +82,9 @@ export default function ProfilePage() {
   const recentReadings = useMemo(() => readings.slice(0, 3), [readings]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [aiConfigOpen, setAiConfigOpen] = useState(false);
+  const [aiConfig, setAiConfig] = useState<AiConfig>(getAiConfig);
+  const [aiConfigured, setAiConfigured] = useState(hasAiConfig);
 
   // 保存昵称
   const handleSaveNickname = () => {
@@ -286,6 +290,92 @@ export default function ProfilePage() {
                     </div>
                     <ChevronRight className="size-4 text-muted-foreground" />
                   </button>
+
+                  {/* AI接口 */}
+                  <Dialog open={aiConfigOpen} onOpenChange={setAiConfigOpen}>
+                    <DialogTrigger asChild>
+                      <button
+                        type="button"
+                        className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-muted/60 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Bot className={`size-4 ${aiConfigured ? 'text-success' : 'text-muted-foreground'}`} />
+                          <span className="text-sm text-foreground">AI接口</span>
+                          {aiConfigured ? (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">已配置</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-warning border-warning/40">未配置</Badge>
+                          )}
+                        </div>
+                        <ChevronRight className="size-4 text-muted-foreground" />
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent className="rounded-2xl max-w-sm">
+                      <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                          <Bot className="size-5 text-primary" />
+                          AI 接口配置
+                        </DialogTitle>
+                        <DialogDescription>
+                          配置你自己的 OpenAI 兼容 API，用于塔罗解读和追问对话
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-2">
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium text-foreground">请求地址</label>
+                          <Input
+                            value={aiConfig.apiUrl}
+                            onChange={(e) => setAiConfig({ ...aiConfig, apiUrl: e.target.value })}
+                            placeholder="https://api.openai.com/v1/chat/completions"
+                            className="rounded-xl text-sm"
+                          />
+                          <p className="text-[11px] text-muted-foreground">OpenAI 兼容的 Chat Completions 端点</p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium text-foreground">模型名称</label>
+                          <Input
+                            value={aiConfig.model}
+                            onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })}
+                            placeholder="gpt-4o-mini"
+                            className="rounded-xl text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium text-foreground">API 密钥</label>
+                          <Input
+                            type="password"
+                            value={aiConfig.apiKey}
+                            onChange={(e) => setAiConfig({ ...aiConfig, apiKey: e.target.value })}
+                            placeholder="sk-..."
+                            className="rounded-xl text-sm"
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button
+                          variant="outline"
+                          className="rounded-xl"
+                          onClick={() => {
+                            setAiConfig(getAiConfig());
+                            setAiConfigOpen(false);
+                          }}
+                        >
+                          取消
+                        </Button>
+                        <Button
+                          className="rounded-xl"
+                          onClick={() => {
+                            saveAiConfig(aiConfig);
+                            setAiConfigured(hasAiConfig());
+                            setAiConfigOpen(false);
+                            toast.success(hasAiConfig() ? 'AI 配置已保存' : '请填写完整的 API 配置');
+                          }}
+                        >
+                          保存
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
 
                   {/* 设置 */}
                   <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>

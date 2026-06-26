@@ -13,7 +13,7 @@ import { Image } from '@/components/ui/image';
 import type { IReadingRecord, IDrawnCard, IChatMessage } from '@/types/tarot';
 import { MOCK_TAROT_CARDS, getCardById } from '@/data/tarotCards';
 import { MOCK_SPREADS } from '@/data/spreads';
-import { logger } from '@lark-apaas/client-toolkit-lite';
+import { callAiStream, hasAiConfig } from '@/lib/aiApi';
 
 interface HistoryDetailSectionProps {
   record: IReadingRecord;
@@ -52,6 +52,10 @@ export default function HistoryDetailSection({ record, onToggleFavorite }: Histo
 
   const handleSendFollowUp = async () => {
     if (!followUpInput.trim() || isSendingFollowUp) return;
+    if (!hasAiConfig()) {
+      toast.error('请先在"我的-功能入口-AI接口"中配置 API');
+      return;
+    }
     const userMsg: IChatMessage = {
       role: 'user',
       content: followUpInput.trim(),
@@ -63,52 +67,33 @@ export default function HistoryDetailSection({ record, onToggleFavorite }: Histo
     setIsSendingFollowUp(true);
 
     try {
-      const { capabilityClient } = await import('@lark-apaas/client-toolkit-lite');
-      const historyContext = JSON.stringify({
-        spreadName: record.spreadName,
-        question: record.question,
-        cards: record.cards.map((c) => {
-          const card = getCardById(c.cardId);
-          return {
-            name: card?.nameCn ?? c.cardId,
-            position: c.positionName,
-            isReversed: c.isReversed,
-          };
-        }),
-        interpretation: record.interpretation
-          ? {
-              overview: record.interpretation.overview,
-              conclusion: record.interpretation.conclusion,
-              advice: record.interpretation.advice,
-            }
-          : null,
-      });
+      const historyContext = `牌阵：${record.spreadName}
+问题：${record.question}
+牌面：${record.cards.map((c) => {
+  const card = getCardById(c.cardId);
+  return `${c.positionName}: ${card?.nameCn ?? c.cardId} (${c.isReversed ? '逆' : '正'})`;
+}).join('，')}
+${record.interpretation ? `解读概述：${record.interpretation.overview}\n综合结论：${record.interpretation.conclusion}` : ''}`;
 
-      let fullContent = '';
-      const stream = capabilityClient.load('tarot_follow_up_chat_1').callStream('textGenerate', {
-        history_context: historyContext,
-        user_question: followUpInput.trim(),
-      });
+      const systemPrompt = '你是一位专业的韦特塔罗解读师，请基于用户的占卜背景和追问问题给出专业、温暖的回答。';
 
-      for await (const chunk of stream) {
-        fullContent += (chunk as { content?: string }).content ?? '';
-        setFollowUpMessages((prev) => {
-          const copy = [...prev];
-          const last = copy[copy.length - 1];
-          if (last && last.role === 'assistant') {
-            copy[copy.length - 1] = { ...last, content: fullContent };
-          } else {
-            copy.push({
-              role: 'assistant',
-              content: fullContent,
-              timestamp: new Date().toISOString(),
-            });
-          }
-          return copy;
-        });
-      }
-    } catch (err) {
-      logger.error('追问失败:', String(err));
+      const fullContent = await callAiStream(systemPrompt, `占卜背景：\n${historyContext}\n\n追问：${followUpInput.trim()}`, () => {});
+
+      setFollowUpMessages((prev) => {
+        const copy = [...prev];
+        const last = copy[copy.length - 1];
+        if (last && last.role === 'assistant') {
+          copy[copy.length - 1] = { ...last, content: fullContent };
+        } else {
+          copy.push({
+            role: 'assistant',
+            content: fullContent,
+            timestamp: new Date().toISOString(),
+          });
+        }
+        return copy;
+      });
+    } catch {
       toast.error('追问失败，请稍后重试');
     } finally {
       setIsSendingFollowUp(false);

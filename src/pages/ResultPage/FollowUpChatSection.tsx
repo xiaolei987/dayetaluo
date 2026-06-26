@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import type { IChatMessage } from '@/types/tarot';
-import { capabilityClient } from '@lark-apaas/client-toolkit-lite';
-import type { TarotFollowUpChatOneInput, TarotFollowUpChatOneOutput } from '@shared/plugin-types';
+import { callAiStream, hasAiConfig } from '@/lib/aiApi';
+import { toast } from 'sonner';
 
 interface FollowUpChatSectionProps {
   /** 历史解读上下文（牌阵信息 + 解读结果摘要） */
@@ -39,7 +39,11 @@ export default function FollowUpChatSection({
     const question = input.trim();
     if (!question || isStreaming) return;
 
-    // 添加用户消息
+    if (!hasAiConfig()) {
+      toast.error('请先在"我的-功能入口-AI接口"中配置 API');
+      return;
+    }
+
     const userMsg: IChatMessage = {
       role: 'user',
       content: question,
@@ -50,7 +54,6 @@ export default function FollowUpChatSection({
     setInput('');
     setIsStreaming(true);
 
-    // 添加占位的 assistant 消息
     const assistantMsg: IChatMessage = {
       role: 'assistant',
       content: '',
@@ -59,24 +62,21 @@ export default function FollowUpChatSection({
     onMessagesChange([...updatedMessages, assistantMsg]);
 
     try {
-      const inputPayload: TarotFollowUpChatOneInput = {
-        history_context: historyContext,
-        user_question: question,
-      };
+      const systemPrompt = `你是一位拥有10年实战经验的专业韦特塔罗解读师。用户之前已经完成了一次塔罗占卜并获得了AI解读，现在正在向你追问。请结合以下占卜背景和用户的追问问题，给出专业、温暖且有针对性的回答。保持共情力，不做绝对化预言。`;
 
       let fullContent = '';
-      const stream = capabilityClient
-        .load('tarot_follow_up_chat_1')
-        .callStream<TarotFollowUpChatOneOutput>('textGenerate', inputPayload);
-
-      for await (const chunk of stream) {
-        fullContent += chunk.content;
-        onMessagesChange([
-          ...updatedMessages,
-          { ...assistantMsg, content: fullContent },
-        ]);
-      }
-    } catch (err) {
+      await callAiStream(
+        systemPrompt,
+        `占卜背景：\n${historyContext}\n\n用户的追问：${question}`,
+        (chunk) => {
+          fullContent += chunk;
+          onMessagesChange([
+            ...updatedMessages,
+            { ...assistantMsg, content: fullContent },
+          ]);
+        },
+      );
+    } catch {
       onMessagesChange([
         ...updatedMessages,
         {
