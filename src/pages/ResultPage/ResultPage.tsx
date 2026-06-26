@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { scopedStorage, logger } from '@lark-apaas/client-toolkit-lite';
 import SpreadLayoutSection from '@/pages/ResultPage/SpreadLayoutSection';
 import InterpretationSection from '@/pages/ResultPage/InterpretationSection';
-import type { IReadingRecord, IInterpretationResult, IChatMessage } from '@/types/tarot';
+import type { IReadingRecord, IInterpretationResult } from '@/types/tarot';
 import type { ISpreadConfig } from '@/types/spread';
 import { MOCK_SPREADS } from '@/data/spreads';
 
@@ -124,19 +124,6 @@ export default function ResultPage() {
     toast.success(updated.isFavorite ? '已收藏' : '已取消收藏');
   }, [record, saveRecord]);
 
-  // 追问消息变更
-  const handleFollowUpMessagesChange = useCallback(
-    (messages: IChatMessage[]) => {
-      if (!record?.interpretation) return;
-      const updated: IReadingRecord = {
-        ...record,
-        interpretation: { ...record.interpretation, followUpChat: messages },
-      };
-      saveRecord(updated);
-    },
-    [record, saveRecord],
-  );
-
   // 分享
   const handleShare = useCallback(async () => {
     if (!record) return;
@@ -148,21 +135,6 @@ export default function ResultPage() {
       toast.error('复制失败，请重试');
     }
   }, [record]);
-
-  // 构建追问历史上下文
-  const followUpContext = useMemo(() => {
-    if (!record || !spread) return '';
-    const parts = [
-      `牌阵：${spread.name}`,
-      `用户问题：${record.question || '未填写'}`,
-    ];
-    if (record.interpretation) {
-      parts.push(`牌面总览：${record.interpretation.overview}`);
-      parts.push(`综合结论：${record.interpretation.conclusion}`);
-      parts.push(`行动建议：${record.interpretation.advice}`);
-    }
-    return parts.join('\n');
-  }, [record, spread]);
 
   // ==================== 加载态 ====================
   if (loading) {
@@ -289,21 +261,6 @@ export default function ResultPage() {
         />
       </motion.div>
 
-      {/* 追问对话区 */}
-      {record.interpretation && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="max-w-7xl mx-auto px-4 md:px-6"
-        >
-          <FollowUpChatSection
-            historyContext={followUpContext}
-            messages={record.interpretation.followUpChat}
-            onMessagesChange={handleFollowUpMessagesChange}
-          />
-        </motion.div>
-      )}
     </div>
   );
 }
