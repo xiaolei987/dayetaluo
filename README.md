@@ -1,6 +1,6 @@
 # 🔮 大爷塔罗（Daye Tarot）
 
-[![Version](https://img.shields.io/badge/version-1.5.3-blue.svg)](https://github.com/xiaolei987/chengqianggenlaodaye)
+[![Version](https://img.shields.io/badge/version-1.5.3-blue.svg)](https://github.com/xiaolei987/dayetaluo)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Web%20%7C%20Android-brightgreen.svg)]()
 
@@ -55,8 +55,8 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/xiaolei987/chengqianggenlaodaye.git
-cd chengqianggenlaodaye
+git clone https://github.com/xiaolei987/dayetaluo.git
+cd dayetaluo
 
 # 安装依赖
 npm install
