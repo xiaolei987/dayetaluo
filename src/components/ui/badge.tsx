@@ -11,8 +11,8 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default:
-          // Primary badge with subtle shadow for elevation
-          "border-transparent bg-primary text-primary-foreground shadow-xs",
+          // Primary badge with golden shimmer gradient for soft mystic brand
+          "border-transparent bg-gradient-to-br from-primary to-[hsl(270_28%_62%)] text-primary-foreground shadow-xs",
         secondary:
           // Subtle filled badge for secondary information
           "border-transparent bg-secondary text-secondary-foreground",

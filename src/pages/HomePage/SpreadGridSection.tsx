@@ -4,7 +4,7 @@ import { Sparkles } from 'lucide-react';
 import { Image } from '@/components/ui/image';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { SPREADS_META } from '@/types/spread';
+import { SPREADS_META } from '@/data/spreads';
 
 export default function SpreadGridSection() {
   const navigate = useNavigate();

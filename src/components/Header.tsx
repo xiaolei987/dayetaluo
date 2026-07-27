@@ -17,7 +17,7 @@ export default function Header() {
           <div className="size-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground text-sm font-bold">
             塔
           </div>
-          <span className="text-base font-semibold text-foreground hidden sm:block">
+          <span className="text-base font-semibold text-foreground">
             大爷塔罗
           </span>
         </NavLink>

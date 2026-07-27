@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { ArrowLeft, Sparkles, Eye, Compass, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -181,6 +181,199 @@ export default function CardDetailPage() {
             </TabsContent>
           </Tabs>
         </motion.div>
+
+        {/* ===== 丰富内容区 (from fatemaster.ai) ===== */}
+
+        {/* 牌面细节 */}
+        {card.cardDetail && card.cardDetail.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.25 }}
+          >
+            <Card className="rounded-2xl border border-border/50 bg-card/80 shadow-sm">
+              <CardContent className="p-6 md:p-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <Eye className="size-4 text-primary/70" />
+                  <h3 className="text-base font-semibold text-foreground">牌面细节</h3>
+                </div>
+                <div className="space-y-4">
+                  {card.cardDetail.map((detail, i) => {
+                    // 检测 ## 标题
+                    if (detail.startsWith('##')) {
+                      return (
+                        <h4 key={i} className="text-sm font-semibold text-foreground pt-2 pb-1 border-b border-border/30">
+                          {detail.slice(2)}
+                        </h4>
+                      );
+                    }
+                    // 检测 - 列表项
+                    if (detail.startsWith('- ')) {
+                      return (
+                        <ul key={i} className="space-y-1 list-disc list-inside text-sm text-foreground/80 leading-relaxed">
+                          {detail.split('\n').filter(l => l.startsWith('- ')).map((item, j) => (
+                            <li key={j} className="pl-1">{item.slice(2)}</li>
+                          ))}
+                        </ul>
+                      );
+                    }
+                    // 普通段落
+                    return (
+                      <p key={i} className="text-sm text-foreground/80 leading-relaxed pl-4 border-l-2 border-primary/15 whitespace-pre-line">
+                        {detail}
+                      </p>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* 牌意推演 + 象征符号 */}
+        {(card.wisdom || card.symbolism) && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+          >
+            <Card className="rounded-2xl border border-border/50 bg-card/80 shadow-sm">
+              <CardContent className="p-6 md:p-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <Compass className="size-4 text-primary/70" />
+                  <h3 className="text-base font-semibold text-foreground">牌意推演</h3>
+                </div>
+                {card.wisdom && (() => {
+                    const blocks = card.wisdom.split('\n\n').filter(b => b.trim());
+                    return (
+                      <div className="space-y-4">
+                        {blocks.map((block, i) => {
+                          if (block.startsWith('##')) {
+                            return (
+                              <h4 key={i} className="text-sm font-semibold text-foreground pt-2 pb-1 border-b border-border/30">
+                                {block.slice(2).trim()}
+                              </h4>
+                            );
+                          }
+                          if (block.startsWith('- ')) {
+                            const items = block.split('\n').filter(l => l.startsWith('- '));
+                            return (
+                              <ul key={i} className="space-y-1 list-disc list-inside text-sm text-foreground/80 leading-relaxed">
+                                {items.map((item, j) => (
+                                  <li key={j} className="pl-1">{item.slice(2)}</li>
+                                ))}
+                              </ul>
+                            );
+                          }
+                          return (
+                            <p key={i} className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
+                              {block.trim()}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                {card.symbolism && card.symbolism !== card.wisdom && (
+                  <div className="mt-4 pt-4 border-t border-border/40">
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+                      象征符号
+                    </h4>
+                    <p className="text-sm text-foreground/75 leading-relaxed">
+                      {card.symbolism}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* 分类释义（恋爱婚姻/工作事业/金钱财物） */}
+        {card.typeMeanings && (card.typeMeanings.love || card.typeMeanings.career || card.typeMeanings.money) && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.38 }}
+          >
+            <Card className="rounded-2xl border border-border/50 bg-card/80 shadow-sm">
+              <CardContent className="p-6 md:p-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <MessageCircle className="size-4 text-primary/70" />
+                  <h3 className="text-base font-semibold text-foreground">分类释义</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {card.typeMeanings.love && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold text-pink-600 dark:text-pink-400">💕 恋爱婚姻</h4>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">正位：</span>
+                          {card.typeMeanings.love.upright}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">逆位：</span>
+                          {card.typeMeanings.love.reversed}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {card.typeMeanings.career && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold text-blue-600 dark:text-blue-400">💼 工作事业</h4>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">正位：</span>
+                          {card.typeMeanings.career.upright}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">逆位：</span>
+                          {card.typeMeanings.career.reversed}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {card.typeMeanings.money && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold text-amber-600 dark:text-amber-400">💰 金钱财物</h4>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">正位：</span>
+                          {card.typeMeanings.money.upright}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">逆位：</span>
+                          {card.typeMeanings.money.reversed}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* 占卜箴言 */}
+        {card.divineMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+          >
+            <Card className="rounded-2xl border border-primary/20 bg-primary/5 shadow-sm">
+              <CardContent className="p-6 md:p-8">
+                <div className="flex items-center gap-2 mb-3">
+                  <MessageCircle className="size-4 text-primary/70" />
+                  <h3 className="text-base font-semibold text-foreground">占卜箴言</h3>
+                </div>
+                <p className="text-sm md:text-base text-foreground/85 leading-relaxed italic whitespace-pre-line">
+                  {card.divineMessage}
+                </p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
 
         {/* 底部操作 */}
         <motion.div

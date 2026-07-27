@@ -64,3 +64,14 @@ pnpm-lock.yaml
 .agent/
 *.apk
 *.zip
+
+# WorkBuddy project memory
+.workbuddy/
+
+# Android
+android/local.properties
+android/.gradle*
+/captures
+
+# Python scraping scripts (not part of app)
+scripts/

@@ -50,7 +50,7 @@ export default function DailyCardSection() {
                 {/* 右侧按钮 */}
                 <div className="shrink-0">
                   <Button
-                    onClick={() => navigate('/draw/daily-card')}
+                    onClick={() => navigate('/daily')}
                     className="rounded-xl px-6 py-5 text-sm font-semibold shadow-sm"
                   >
                     <Sparkles className="size-4" />

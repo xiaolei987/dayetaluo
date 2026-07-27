@@ -34,7 +34,7 @@ export default function HeroSection() {
             </motion.div>
 
             {/* 主标题 */}
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-foreground leading-tight">
+            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-foreground leading-tight">
               大爷
               <span className="text-primary">塔罗</span>
             </h1>
@@ -45,7 +45,7 @@ export default function HeroSection() {
               让塔罗的智慧，温柔地照亮你的前路。
             </p>
 
-            {/* 每日一牌快捷入口 */}
+            {/* 今日一牌快捷入口 */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -55,7 +55,7 @@ export default function HeroSection() {
               <Button
                 size="lg"
                 className="rounded-xl text-base px-6 py-6 h-auto gap-2 shadow-sm hover:shadow-md transition-shadow"
-                onClick={() => navigate('/draw/daily-card')}
+                onClick={() => navigate('/daily')}
               >
                 <Sparkles className="size-5" />
                 今日一牌 · 获取指引
@@ -65,7 +65,7 @@ export default function HeroSection() {
 
             {/* 底部小字 */}
             <p className="text-xs text-muted-foreground/70">
-              每日一牌 · 无需注册 · 即刻体验
+              每日一牌，即刻体验
             </p>
           </motion.div>
 

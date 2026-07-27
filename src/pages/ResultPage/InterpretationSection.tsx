@@ -7,9 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { callAiStream, hasAiConfig } from '@/lib/aiApi';
-import type { IInterpretationResult, IDrawnCard } from '@/types/tarot';
+import type { IInterpretationResult, IDrawnCard, QuestionType } from '@/types/tarot';
 import type { ISpreadConfig } from '@/types/spread';
 import { MOCK_TAROT_CARDS } from '@/data/tarotCards';
+import { buildSpreadSystemPrompt, buildSpreadUserMessage } from '@/data/tarotPrompts';
 
 // ==================== Props ====================
 interface InterpretationSectionProps {
@@ -19,6 +20,8 @@ interface InterpretationSectionProps {
   drawnCards: IDrawnCard[];
   /** 用户问题 */
   question: string;
+  /** 问题分类 */
+  questionType?: QuestionType;
   /** 解读结果（从父组件传入，支持回看历史） */
   interpretation: IInterpretationResult | null;
   /** 解读结果变更回调 */
@@ -47,6 +50,7 @@ export default function InterpretationSection({
   spread,
   drawnCards,
   question,
+  questionType,
   interpretation,
   onInterpretationChange,
 }: InterpretationSectionProps) {
@@ -55,10 +59,11 @@ export default function InterpretationSection({
   const [streamingContent, setStreamingContent] = useState('');
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     overview: true,
-    energyFlow: false,
     cardDetails: false,
+    energyFlow: false,
     conclusion: false,
     advice: false,
+    selfReflection: false,
   });
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -78,91 +83,47 @@ export default function InterpretationSection({
     setIsGenerating(true);
     setStreamingContent('');
 
-    // 构建牌阵信息
-    const spreadInfo = `牌阵：${spread.name}（${spread.cardCount}张牌）
-牌位含义：
-${spread.positions.map((p) => `  ${p.index}. ${p.name}：${p.description}`).join('\n')}`;
-
-    // 构建卡牌列表
-    const cardList = drawnCards
-      .map((dc) => {
-        const card = MOCK_TAROT_CARDS.find((c) => c.id === dc.cardId);
-        if (!card) return null;
-        const direction = dc.isReversed ? '逆位' : '正位';
-        const keywords = dc.isReversed ? card.reversedKeywords.join('、') : card.uprightKeywords.join('、');
-        return `牌位「${dc.positionName}」：${card.nameCn}（${card.nameEn}）${direction}
-  关键词：${keywords}
-  释义：${dc.isReversed ? card.reversedMeaning : card.uprightMeaning}`;
-      })
-      .filter(Boolean)
-      .join('\n\n');
-
-    const styleLabel = STYLE_LABEL_MAP[style];
-
-    const systemPrompt = `你是一位拥有10年实战经验的专业韦特塔罗解读师，深度研究荣格心理学与象征主义，擅长用温暖且有力量的语言解读牌面。
-
-解读原则：
-1. 严格基于提供的牌阵、每张牌的正逆位和牌阵中的具体位置含义进行解读，禁止凭空捏造。
-2. 不做绝对化的命运预言，强调人的主观能动性。
-3. 语言表达流畅自然，符合年轻女性用户的阅读习惯，语气温柔有共情力。
-4. 禁止涉及医疗、法律、投资等专业领域建议。
-
-请严格按以下 Markdown 格式输出：
-## 牌面总览
-用一句话概括本次牌阵的核心主题与整体能量基调。
-
-## 能量流动
-分析每张牌在牌阵位置中的相互作用关系，描述能量如何在各牌位之间流转。例如：过去的牌如何影响现在，现在的势能如何指向未来；牌与牌之间是冲突、呼应还是递进关系。要结合具体的牌阵名称和位置含义来说明。
-
-## 分牌详细解读
-按牌阵位置顺序逐一解读，每张牌必须明确标注【位置名称】和牌名，格式：
-**【位置名称】牌名 · 正/逆位**
-解读内容，结合位置含义与牌意进行分析。
-
-## 综合结论
-整合所有牌面信息，给出核心洞察与整体趋势。
-
-## 行动建议
-给出2-3条具体、可落地的行动建议。
-
-结尾附：💡 温馨提示：塔罗解读仅供娱乐与心理参考，最终选择权始终在你手中。`;
-
-    const userMessage = `本次使用的牌阵是「${spread.name}」，这是一个${spread.cardCount}张牌的牌阵，适用场景：${spread.scenario}。
-
-解读风格：${styleLabel}
-
-${spreadInfo}
-
-抽到的牌面（每张牌已标注在牌阵中的具体位置和正逆位）：
-${cardList}
-
-用户问题：${question || '请给我一个综合解读'}
-
-请基于以上信息进行专业解读，务必在牌阵整体语境下分析，不要孤立看待每张牌。`;
+    const systemPrompt = buildSpreadSystemPrompt(spread, drawnCards, MOCK_TAROT_CARDS, style);
+    const userMessage = buildSpreadUserMessage(spread, drawnCards, MOCK_TAROT_CARDS, question, style, questionType);
 
     const controller = new AbortController();
     abortRef.current = controller;
 
     try {
       let fullContent = '';
+      let doneReceived = false;
+      
       await callAiStream(
         systemPrompt,
         userMessage,
         (chunk) => {
           fullContent += chunk;
-          setStreamingContent(fullContent);
+          // 检测到 [解读完毕] 才允许渲染
+          if (fullContent.includes('[解读完毕]')) {
+            doneReceived = true;
+          }
+          // 没收到标记前不渲染任何内容
+          if (doneReceived) {
+            const display = fullContent.replace('[解读完毕]', '').trim();
+            setStreamingContent(display);
+          }
         },
         controller.signal,
       );
 
       if (!controller.signal.aborted) {
-        const parsed = parseInterpretationContent(fullContent);
+        // 去掉结束标记后再解析
+        const cleanContent = fullContent.replace('[解读完毕]', '').trim();
+        const parsed = parseInterpretationContent(cleanContent);
         onInterpretationChange({
           overview: parsed.overview,
-          energyFlow: parsed.energyFlow,
           cardDetails: parsed.cardDetails,
+          positionAnalysis: parsed.positionAnalysis,
+          energyFlow: parsed.energyFlow,
+          coreConflict: parsed.coreConflict,
           conclusion: parsed.conclusion,
           advice: parsed.advice,
+          selfReflection: parsed.selfReflection,
           followUpChat: [],
         });
       }
@@ -176,7 +137,7 @@ ${cardList}
       setStreamingContent('');
       abortRef.current = null;
     }
-  }, [isGenerating, spread, drawnCards, question, style, onInterpretationChange]);
+  }, [isGenerating, spread, drawnCards, question, questionType, style, onInterpretationChange]);
 
   // ==================== 复制 ====================
   const handleCopy = useCallback(
@@ -198,11 +159,12 @@ ${cardList}
     if (!interpretation) return null;
 
     const sections = [
-      { key: 'overview', title: '🔮 牌面总览', content: interpretation.overview },
-      { key: 'energyFlow', title: '🌊 能量流动', content: interpretation.energyFlow },
-      { key: 'cardDetails', title: '📜 分牌详细解读', content: interpretation.cardDetails },
-      { key: 'conclusion', title: '✨ 综合结论', content: interpretation.conclusion },
-      { key: 'advice', title: '💡 行动建议', content: interpretation.advice },
+      { key: 'overview', title: '🔮 牌阵能量总览', content: interpretation.overview, icon: '🔮' },
+      { key: 'cardDetails', title: '📜 牌面逐一解读', content: interpretation.cardDetails, icon: '📜', isCardDetails: true },
+      { key: 'energyFlow', title: '🔗 牌面联动分析', content: interpretation.energyFlow, icon: '🔗' },
+      { key: 'conclusion', title: '📖 综合牌阵故事', content: interpretation.conclusion, icon: '📖' },
+      { key: 'advice', title: '💡 启发式指引', content: interpretation.advice, icon: '💡' },
+      { key: 'selfReflection', title: '🪞 自我觉察提问', content: interpretation.selfReflection, icon: '🪞' },
     ];
 
     return (
@@ -212,7 +174,7 @@ ${cardList}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         className="space-y-4"
       >
-        {sections.map((section, idx) => {
+        {sections.map((section) => {
           const isExpanded = expandedSections[section.key] ?? false;
           return (
             <Card key={section.key} className="rounded-2xl border-border/40 shadow-sm">
@@ -239,7 +201,7 @@ ${cardList}
                     className="overflow-hidden"
                   >
                     <div className="px-4 pb-4">
-                      {section.key === 'cardDetails' ? (
+                      {section.isCardDetails ? (
                         <div className="space-y-3">
                           {(section.content as IInterpretationResult['cardDetails']).map((cd, ci) => (
                             <div
@@ -268,11 +230,11 @@ ${cardList}
                             className="shrink-0 size-8"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleCopy(section.content as string, idx);
+                              handleCopy(section.content as string, sections.indexOf(section));
                             }}
                             aria-label="复制"
                           >
-                            {copiedIndex === idx ? (
+                            {copiedIndex === sections.indexOf(section) ? (
                               <Check className="size-3.5 text-success" />
                             ) : (
                               <Copy className="size-3.5" />
@@ -448,29 +410,47 @@ ${cardList}
 /** 解析流式输出的结构化解读内容 */
 function parseInterpretationContent(raw: string): {
   overview: string;
-  energyFlow: string;
   cardDetails: IInterpretationResult['cardDetails'];
+  positionAnalysis: string;
+  energyFlow: string;
+  coreConflict: string;
   conclusion: string;
   advice: string;
+  selfReflection: string;
 } {
-  const overview = extractSection(raw, ['牌面总览']);
-  const energyFlow = extractSection(raw, ['能量流动']);
-  const cardDetailsRaw = extractSection(raw, ['分牌详细解读', '分牌解读']);
-  const conclusion = extractSection(raw, ['综合结论']);
-  const advice = extractSection(raw, ['行动建议']);
+  // 新版6段式输出优先，回退旧版
+  const overview = extractSection(raw, ['牌阵能量总览', '整体解读', '牌面总览']);
+  const cardDetailsRaw = extractSection(raw, ['牌面逐一解读', '分牌详细解读', '分牌解读']);
+  const energyFlow = extractSection(raw, ['牌面联动分析', '能量流动', '牌间互动']);
+  const conclusion = extractSection(raw, ['综合牌阵故事', '综合牌阵分析', '综合结论']);
+  const advice = extractSection(raw, ['启发式指引', '行动建议']);
+  const selfReflection = extractSection(raw, ['自我觉察提问', '自我觉察']);
+  // 旧版兼容
+  const positionAnalysis = extractSection(raw, ['牌阵宫位精析', '宫位精析']);
+  const coreConflict = extractSection(raw, ['核心冲突与转化', '核心冲突']);
 
   // 解析分牌解读为结构化数组
   const cardDetails: IInterpretationResult['cardDetails'] = [];
   if (cardDetailsRaw) {
-    const parts = cardDetailsRaw.split(/(?=牌位[「「])/);
+    // 新版格式：**牌名** 或 旧版格式：牌位「XXX」
+    const parts = cardDetailsRaw.split(/(?=\*\*|牌位[「「])/);
     for (const part of parts) {
-      const match = part.match(/牌位[「「](.+?)[」」]/);
-      if (match) {
-        cardDetails.push({
-          cardId: '',
-          positionName: match[1],
-          content: part.replace(/牌位[「「].+?[」」][：:]?\s*/, '').trim(),
-        });
+      // 新版：**牌名** 或 **【位置】牌名**
+      let posName = '';
+      let content = part;
+      const boldMatch = part.match(/^\*\*(.+?)\*\*/);
+      if (boldMatch) {
+        posName = boldMatch[1].replace(/^【.+?】/, '').trim();
+        content = part.slice(boldMatch[0].length).trim();
+      } else {
+        const legacyMatch = part.match(/牌位[「「](.+?)[」」]/);
+        if (legacyMatch) {
+          posName = legacyMatch[1];
+          content = part.replace(/牌位[「「].+?[」」][：:]?\s*/, '').trim();
+        }
+      }
+      if (posName && content) {
+        cardDetails.push({ cardId: '', positionName: posName, content });
       }
     }
     if (cardDetails.length === 0 && cardDetailsRaw.trim()) {
@@ -479,55 +459,35 @@ function parseInterpretationContent(raw: string): {
   }
 
   return {
-    overview: overview || '解读生成中，请稍候...',
-    energyFlow: energyFlow || '解读生成中，请稍候...',
+    overview: overview || '牌阵能量正在汇聚……',
     cardDetails,
+    positionAnalysis: positionAnalysis || '',
+    energyFlow: energyFlow || '',
+    coreConflict: coreConflict || '',
     conclusion: conclusion || '解读生成中，请稍候...',
-    advice: advice || '解读生成中，请稍候...',
+    advice: advice || '请在实际生活中保持觉察与行动',
+    selfReflection: selfReflection || '',
   };
 }
 
-/** 从原始文本中提取指定章节 */
+/** 从原始文本中提取指定章节 — 终极简化版 */
 function extractSection(raw: string, markers: string[]): string {
-  for (const marker of markers) {
-    // 匹配 ## 或 ### 或 ** 开头的章节标题
-    const patterns = [
-      new RegExp(`#{1,3}\\s*${escapeRegex(marker)}`, 'i'),
-      new RegExp(`\\*\\*${escapeRegex(marker)}\\*\\*`, 'i'),
-      new RegExp(escapeRegex(marker), 'i'),
-    ];
-
-    for (const pattern of patterns) {
-      const match = pattern.exec(raw);
-      if (!match) continue;
-
-      const startIdx = match.index + match[0].length;
-      // 跳到实际内容开始（跳过冒号、空格、换行）
-      let start = startIdx;
-      while (start < raw.length && /[：:\s\n]/.test(raw[start])) start++;
-
-      // 找下一个章节标题作为结束
-      const nextPattern = /(?:#{1,3}\s*|\*\*)([^\n*]+?)(?:\*\*)?\s*\n/gi;
-      nextPattern.lastIndex = start;
-      let end = raw.length;
-      let m: RegExpExecArray | null;
-      while ((m = nextPattern.exec(raw)) !== null) {
-        const title = m[1].trim();
-        // 检查是否是已知的章节标题
-        const allMarkers = ['牌面总览', '能量流动', '分牌详细解读', '分牌解读', '综合结论', '行动建议'];
-        if (allMarkers.some(am => title.includes(am))) {
-          end = m.index;
-          break;
-        }
+  const cleanRaw = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  // split at ## or ### or # at the start of any line
+  const parts = cleanRaw.split(/^#{1,3}\s+/m);
+  
+  for (let i = 1; i < parts.length; i++) {
+    const part = parts[i];
+    const newline = part.indexOf('\n');
+    const title = newline > 0 ? part.slice(0, newline).trim() : part.trim();
+    const content = newline > 0 ? part.slice(newline + 1).trim() : '';
+    
+    for (const marker of markers) {
+      if (title.includes(marker)) {
+        return content;
       }
-
-      const result = raw.slice(start, end).trim();
-      if (result) return result;
     }
   }
+  
   return '';
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

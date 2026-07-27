@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   Dialog,
   DialogContent,
@@ -16,45 +17,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { scopedStorage } from '@lark-apaas/client-toolkit-lite';
 import type { IUserProfile, IReadingRecord } from '@/types/tarot';
 import { Image } from '@/components/ui/image';
 import { getAiConfig, saveAiConfig, hasAiConfig, type AiConfig } from '@/lib/aiApi';
-
-const STORAGE_KEY_PROFILE = '__tarot_userProfile';
-const STORAGE_KEY_READINGS = '__tarot_readings';
-const STORAGE_KEY_FAVORITES = '__tarot_favorites';
-
-function getStoredProfile(): IUserProfile {
-  try {
-    const raw = scopedStorage.getItem(STORAGE_KEY_PROFILE);
-    if (raw) return JSON.parse(raw) as IUserProfile;
-  } catch { /* ignore */ }
-  return { nickname: '塔罗探索者' };
-}
-
-function getStoredReadings(): IReadingRecord[] {
-  try {
-    const raw = scopedStorage.getItem(STORAGE_KEY_READINGS);
-    if (raw) return JSON.parse(raw) as IReadingRecord[];
-  } catch { /* ignore */ }
-  return [];
-}
-
-function getStoredFavorites(): string[] {
-  try {
-    const raw = scopedStorage.getItem(STORAGE_KEY_FAVORITES);
-    if (raw) return JSON.parse(raw) as string[];
-  } catch { /* ignore */ }
-  return [];
-}
+import { loadReadings, loadFavorites, saveReadings, saveFavorites, loadUserProfile, saveUserProfile } from '@/lib/storage';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
 
-  const [profile, setProfile] = useState<IUserProfile>(getStoredProfile);
-  const [readings, setReadings] = useState<IReadingRecord[]>(getStoredReadings);
-  const [favoriteIds, setFavoriteIds] = useState<string[]>(getStoredFavorites);
+  const [profile, setProfile] = useState<IUserProfile>(() => loadUserProfile() || { nickname: '塔罗探索者' });
+  const [readings, setReadings] = useState<IReadingRecord[]>(loadReadings);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(loadFavorites);
 
   const [editingNickname, setEditingNickname] = useState(false);
   const [nicknameDraft, setNicknameDraft] = useState(profile.nickname);
@@ -95,15 +68,15 @@ export default function ProfilePage() {
     }
     const updated: IUserProfile = { ...profile, nickname: trimmed };
     setProfile(updated);
-    scopedStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(updated));
+    saveUserProfile(updated);
     setEditingNickname(false);
     toast.success('昵称已更新');
   };
 
   // 刷新数据
   useEffect(() => {
-    setReadings(getStoredReadings());
-    setFavoriteIds(getStoredFavorites());
+    setReadings(loadReadings());
+    setFavoriteIds(loadFavorites());
   }, []);
 
   return (
@@ -141,7 +114,7 @@ export default function ProfilePage() {
                           <Input
                             value={nicknameDraft}
                             onChange={(e) => setNicknameDraft(e.target.value)}
-                            className="h-9 text-base font-semibold max-w-[180px]"
+                            className="h-9 text-base font-semibold font-serif max-w-[180px]"
                             autoFocus
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') handleSaveNickname();
@@ -173,7 +146,7 @@ export default function ProfilePage() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <h2 className="text-lg font-semibold text-foreground truncate">
+                          <h2 className="text-lg font-semibold font-serif text-foreground truncate">
                             {profile.nickname}
                           </h2>
                           <Button
@@ -235,7 +208,7 @@ export default function ProfilePage() {
               {/* 收藏数 */}
               <Card className="rounded-2xl border-border/50 bg-card/80 shadow-sm">
                 <CardContent className="p-4 text-center">
-                  <Heart className="size-5 text-destructive mx-auto mb-1.5" />
+                  <Heart className="size-5 text-warning mx-auto mb-1.5" />
                   <div className="text-2xl font-bold tabular-nums text-foreground">
                     {stats.totalFavorites}
                   </div>
@@ -267,7 +240,7 @@ export default function ProfilePage() {
                     className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-muted/60 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <Heart className="size-4 text-destructive" />
+                      <Heart className="size-4 text-warning" />
                       <span className="text-sm text-foreground">我的收藏</span>
                       {stats.totalFavorites > 0 && (
                         <Badge variant="secondary" className="text-xs">
@@ -310,7 +283,7 @@ export default function ProfilePage() {
                         <ChevronRight className="size-4 text-muted-foreground" />
                       </button>
                     </DialogTrigger>
-                    <DialogContent className="rounded-2xl max-w-sm">
+                    <DialogContent className="rounded-2xl max-w-sm max-h-[85vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                           <Bot className="size-5 text-primary" />
@@ -410,8 +383,8 @@ export default function ProfilePage() {
                           size="sm"
                           className="w-full rounded-xl gap-2"
                           onClick={() => {
-                            scopedStorage.removeItem(STORAGE_KEY_READINGS);
-                            scopedStorage.removeItem(STORAGE_KEY_FAVORITES);
+                            saveReadings([]);
+                            saveFavorites([]);
                             setReadings([]);
                             setFavoriteIds([]);
                             setSettingsOpen(false);
@@ -509,7 +482,7 @@ export default function ProfilePage() {
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-foreground truncate">
+                            <span className="text-sm font-medium font-serif text-foreground truncate">
                               {record.spreadName}
                             </span>
                             <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
@@ -580,11 +553,11 @@ export default function ProfilePage() {
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-foreground truncate">
+                            <span className="text-sm font-medium font-serif text-foreground truncate">
                               {record.spreadName}
                             </span>
                             {record.isFavorite && (
-                              <Heart className="size-3 text-destructive shrink-0 fill-destructive" />
+                              <Heart className="size-3 text-warning shrink-0 fill-warning" />
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground truncate mt-0.5">
@@ -613,25 +586,19 @@ export default function ProfilePage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: 0.2 }}
-                className="text-center py-12"
               >
-                <div className="size-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <Sparkles className="size-7 text-primary" />
-                </div>
-                <h3 className="text-base font-semibold text-foreground mb-1">
-                  还没有占卜记录
-                </h3>
-                <p className="text-sm text-muted-foreground mb-5">
-                  开始你的第一次塔罗占卜吧
-                </p>
-                <Button
-                  variant="outline"
-                  className="rounded-xl"
-                  onClick={() => navigate('/')}
-                >
-                  <Sparkles className="size-4" />
-                  去首页选择牌阵
-                </Button>
+                <EmptyState
+                  variant="card"
+                  icon={<Sparkles className="size-7" />}
+                  title="还没有占卜记录"
+                  description="开始你的第一次塔罗占卜吧"
+                  action={(
+                    <Button variant="outline" className="rounded-xl" onClick={() => navigate('/')}>
+                      <Sparkles className="size-4" />
+                      去首页选择牌阵
+                    </Button>
+                  )}
+                />
               </motion.div>
             </div>
           </section>

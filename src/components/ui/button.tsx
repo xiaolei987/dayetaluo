@@ -13,8 +13,8 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          // Solid primary button with computed border for depth
-          "bg-primary text-primary-foreground border border-primary-border",
+          // Solid primary button with golden shimmer gradient and depth border
+          "bg-gradient-to-br from-primary via-[hsl(270_25%_68%)] to-[hsl(270_28%_58%)] text-primary-foreground border border-primary-border shadow-md shadow-primary/10",
         destructive:
           // Destructive action button with matching border
           "bg-destructive text-destructive-foreground border border-destructive-border",

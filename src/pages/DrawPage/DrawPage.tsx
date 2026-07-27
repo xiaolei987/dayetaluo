@@ -1,29 +1,69 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Shuffle, Scissors, Sparkles, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Image } from '@/components/ui/image';
-import { scopedStorage } from '@lark-apaas/client-toolkit-lite';
 import { MOCK_SPREADS } from '@/data/spreads';
+import { addReading } from '@/lib/storage';
 import { MOCK_TAROT_CARDS, CARD_BACK_IMAGE_URL } from '@/data/tarotCards';
-import type { ITarotCard, IDrawnCard } from '@/types/tarot';
+import type { ITarotCard, IDrawnCard, QuestionType } from '@/types/tarot';
 
 type Phase = 'idle' | 'shuffling' | 'ready_to_cut' | 'cut_done' | 'drawing' | 'revealing' | 'complete';
 
+// ===== 真随机系统 =====
+
+/** crypto.getRandomValues — 硬件真随机 [0, 1) */
+function cryptoRandom(): number {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return buf[0] / 0xFFFFFFFF;
+}
+
+/** 收集物理噪音：加速度计 + 高精度时间戳抖动 */
+function collectPhysicalNoise(): number {
+  let noise = performance.now() % 0.001; // 微秒级时间抖动
+
+  // DeviceMotion 加速度计（仅在支持的设备上）
+  if (typeof DeviceMotionEvent !== 'undefined') {
+    try {
+      // 同步方式：如果已有权限，尝试读取上一次事件
+      const handler = (e: DeviceMotionEvent) => {
+        const a = e.accelerationIncludingGravity;
+        if (a?.x != null && a?.y != null && a?.z != null) {
+          noise += (Math.abs(a.x) + Math.abs(a.y) + Math.abs(a.z)) * 0.001;
+        }
+      };
+      window.addEventListener('devicemotion', handler, { once: true });
+      // 无法同步获取，用 performance.now() 二次抖动代替
+      noise += (performance.now() % 0.0001);
+    } catch {
+      noise += (performance.now() % 0.001);
+    }
+  }
+
+  return noise % 1;
+}
+
+/** 混入物理噪音的真随机数 */
+function trueRandom(): number {
+  return (cryptoRandom() + collectPhysicalNoise()) % 1;
+}
+
+/** Fisher-Yates + 真随机洗牌 */
 function shuffleDeck(cards: ITarotCard[]): ITarotCard[] {
   const shuffled = [...cards];
   for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(trueRandom() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled;
 }
 
 function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  return Date.now().toString(36) + cryptoRandom().toString(36).slice(2, 8);
 }
 
 export default function DrawPage() {
@@ -34,7 +74,9 @@ export default function DrawPage() {
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [question, setQuestion] = useState('');
+  const [questionType, setQuestionType] = useState<QuestionType>('');
   const [deck, setDeck] = useState<ITarotCard[]>([]);
+  const [drawnCardIds, setDrawnCardIds] = useState<Set<string>>(new Set());
   const [drawnCards, setDrawnCards] = useState<IDrawnCard[]>([]);
   const [revealedIndices, setRevealedIndices] = useState<Set<number>>(new Set());
 
@@ -63,22 +105,29 @@ export default function DrawPage() {
   // ---- 切牌 ----
   const handleCut = useCallback((index: number) => {
     setDeck(prev => [...prev.slice(index), ...prev.slice(0, index)]);
+    setDrawnCardIds(new Set());
+    setDrawnCards([]);
     setPhase('cut_done');
   }, []);
 
   const handleAutoCut = useCallback(() => {
     if (deck.length < 10) return;
-    const idx = Math.floor(Math.random() * (deck.length - 10)) + 5;
+    const idx = Math.floor(trueRandom() * (deck.length - 10)) + 5;
     handleCut(idx);
   }, [deck.length, handleCut]);
 
   // ---- 手动抽牌 ----
   const handleDrawCard = useCallback((cardIndex: number) => {
-    if (drawnCards.length >= spread.cardCount || cardIndex >= deck.length) return;
-
     const card = deck[cardIndex];
+    if (!card || drawnCardIds.has(card.id)) return;
+    if (drawnCards.length >= spread.cardCount) return;
+
     const position = spread.positions[drawnCards.length];
-    const isReversed = Math.random() > 0.5;
+
+    // 元素牌阵花色校验：仅允许对应花色的牌
+    if (position.requiredSuit && card.category !== position.requiredSuit) return;
+
+    const isReversed = trueRandom() > 0.5;
 
     const drawnCard: IDrawnCard = {
       cardId: card.id,
@@ -86,40 +135,43 @@ export default function DrawPage() {
       isReversed,
     };
 
+    setDrawnCardIds(prev => new Set([...prev, card.id]));
     setDrawnCards(prev => [...prev, drawnCard]);
-    setDeck(prev => prev.filter((_, i) => i !== cardIndex));
 
     if (drawnCards.length + 1 >= spread.cardCount) {
       setPhase('revealing');
     }
-  }, [deck, drawnCards.length, spread]);
+  }, [deck, drawnCardIds, drawnCards.length, spread]);
 
   // ---- 自动抽牌 ----
-  const handleAutoDraw = useCallback(() => {
+  const handleAutoDraw = useCallback(async () => {
     setPhase('drawing');
     const cardsToDraw = spread.cardCount;
     const newDrawn: IDrawnCard[] = [];
-    let remainingDeck = [...deck];
+    const pickedIds = new Set(drawnCardIds);
 
     for (let i = 0; i < cardsToDraw; i++) {
-      const idx = Math.floor(Math.random() * remainingDeck.length);
-      const card = remainingDeck[idx];
       const position = spread.positions[i];
-      const isReversed = Math.random() > 0.5;
+      // 从未被选走的牌中随机抽取，有花色要求时仅限对应花色
+      let available = deck.filter(c => !pickedIds.has(c.id));
+      if (position.requiredSuit) {
+        available = available.filter(c => c.category === position.requiredSuit);
+      }
+      if (available.length === 0) break;
+      const idx = Math.floor(trueRandom() * available.length);
+      const card = available[idx];
+      const isReversed = trueRandom() > 0.5;
 
-      newDrawn.push({
-        cardId: card.id,
-        positionName: position.name,
-        isReversed,
-      });
+      newDrawn.push({ cardId: card.id, positionName: position.name, isReversed });
+      pickedIds.add(card.id);
 
-      remainingDeck = remainingDeck.filter((_, j) => j !== idx);
+      setDrawnCardIds(new Set(pickedIds));
+      await new Promise(r => setTimeout(r, 350));
     }
 
     setDrawnCards(newDrawn);
-    setDeck(remainingDeck);
     setPhase('revealing');
-  }, [deck, spread]);
+  }, [deck, drawnCardIds, spread]);
 
   // ---- 翻牌 ----
   const handleRevealCard = useCallback((index: number) => {
@@ -137,10 +189,17 @@ export default function DrawPage() {
     const all = new Set<number>();
     for (let i = 0; i < spread.cardCount; i++) all.add(i);
     setRevealedIndices(all);
+    // 翻牌动画 700ms + 飞牌到牌阵位置 1200ms + 稳定 300ms
     setTimeout(() => setPhase('complete'), 700);
   }, [spread.cardCount]);
 
-  // ---- 完成 → 跳转结果页 ----
+  // ---- 完成 → 自动跳转 ----
+  useEffect(() => {
+    if (phase !== 'complete') return;
+    const timer = setTimeout(() => handleComplete(), 1800);
+    return () => clearTimeout(timer);
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleComplete = useCallback(() => {
     const readingId = generateId();
     const record = {
@@ -148,17 +207,14 @@ export default function DrawPage() {
       spreadId: spread.id,
       spreadName: spread.name,
       question,
+      questionType: questionType || undefined,
       cards: drawnCards,
       style: 'gentle' as const,
       isFavorite: false,
       createdAt: new Date().toISOString(),
     };
 
-    const raw = scopedStorage.getItem('__tarot_readings');
-    const existing = raw ? JSON.parse(raw) : [];
-    existing.unshift(record);
-    scopedStorage.setItem('__tarot_readings', JSON.stringify(existing));
-
+    addReading(record);
     navigate(`/result/${readingId}`);
   }, [spread, question, drawnCards, navigate]);
 
@@ -203,12 +259,26 @@ export default function DrawPage() {
             <label className="text-sm font-medium text-foreground">
               你想问什么？（选填）
             </label>
-            <Input
-              value={question}
-              onChange={e => setQuestion(e.target.value)}
-              placeholder="例如：我最近的感情运势如何？"
-              className="h-12 rounded-xl bg-card/80"
-            />
+            <div className="flex gap-2 flex-wrap">
+              {([
+                { key: 'love' as const, label: '💕 恋爱婚姻', active: 'bg-pink-500/10 border-pink-500/30 text-pink-600 dark:text-pink-400' },
+                { key: 'career' as const, label: '💼 工作事业', active: 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400' },
+                { key: 'money' as const, label: '💰 金钱财物', active: 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400' },
+              ] as const).map(({ key, label, active }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setQuestionType(questionType === key ? '' : key)}
+                  className={`px-4 py-2.5 rounded-xl border text-sm font-medium transition-all duration-200 ${
+                    questionType === key
+                      ? active + ' shadow-sm'
+                      : 'border-border/60 bg-card/50 text-muted-foreground hover:border-border hover:text-foreground'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </motion.div>
         )}
 
@@ -306,7 +376,7 @@ export default function DrawPage() {
                     style={{
                       top: `${i * 1.5}px`,
                       zIndex: i,
-                      transform: `rotate(${(Math.random() - 0.5) * 4}deg)`,
+                      transform: `rotate(${(trueRandom() - 0.5) * 4}deg)`,
                     }}
                     onClick={() => handleCut(i + 5)}
                   >
@@ -331,48 +401,111 @@ export default function DrawPage() {
             </motion.div>
           )}
 
-          {/* ===== 阶段 4/5: 抽牌中 ===== */}
+          {/* ===== 阶段 4/5: 抽牌中 — 横向扇形展牌 ===== */}
           {(phase === 'cut_done' || phase === 'drawing') && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5 }}
-              className="text-center space-y-6 w-full"
+              className="text-center space-y-5 w-full"
             >
               <p className="text-sm text-muted-foreground">
                 请抽取 {remainingDraws} 张牌
               </p>
 
-              {/* 剩余牌堆 */}
-              <div className="relative w-full max-w-xs mx-auto h-40">
-                {deck.slice(0, Math.min(12, deck.length)).map((card, i) => (
-                  <motion.div
-                    key={`${card.id}-${i}`}
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.02 }}
-                    whileHover={{ y: -8, scale: 1.05 }}
-                    className="absolute left-1/2 -translate-x-1/2 w-24 h-36 rounded-lg border border-primary/20 overflow-hidden cursor-pointer hover:border-primary/40 hover:shadow-md transition-all"
-                    style={{
-                      top: `${i * 2}px`,
-                      zIndex: i,
-                      transform: `rotate(${(Math.random() - 0.5) * 3}deg)`,
-                    }}
-                    onClick={() => handleDrawCard(i)}
-                  >
-                    <Image src={CARD_BACK_IMAGE_URL} alt="卡背" className="w-full h-full object-cover" />
-                  </motion.div>
-                ))}
+              {/* 三行牌叠 */}
+              <div className="relative w-full overflow-visible space-y-3 pt-8 pb-4">
+                  {(() => {
+                    const curPos = spread.positions[drawnCards.length];
+                    const requiredSuit = curPos?.requiredSuit;
+                    const chunkSize = Math.ceil(deck.length / 3);
+                    const rows = [
+                      deck.slice(0, chunkSize),
+                      deck.slice(chunkSize, chunkSize * 2),
+                      deck.slice(chunkSize * 2),
+                    ];
+                    return rows.map((row, rowIdx) => (
+                      <div key={`row-${rowIdx}`} className="flex items-center justify-center px-2 py-1">
+                        <AnimatePresence>
+                        {row.map((card, colIdx) => {
+                          const realIdx = rowIdx * chunkSize + colIdx;
+                          const isDrawn = drawnCardIds.has(card.id);
+                          const isSuitMismatch = requiredSuit && card.category !== requiredSuit;
+
+                          // 已选中的牌：不渲染，让 AnimatePresence 播放 exit 飞离动画
+                          if (isDrawn) return null;
+
+                          const disabled = isSuitMismatch;
+
+                          return (
+                            <motion.div
+                              key={`fan-${card.id}`}
+                              initial={{ opacity: 0, y: -15, scale: 0.9 }}
+                              animate={{
+                                opacity: isSuitMismatch ? 0.2 : 1,
+                                y: 0,
+                                scale: isSuitMismatch ? 0.94 : 1,
+                              }}
+                              exit={{
+                                opacity: 0,
+                                y: -100,
+                                scale: 0.5,
+                                rotateZ: -15,
+                                transition: { duration: 0.35, ease: [0.4, 0, 0.2, 1] },
+                              }}
+                              transition={{
+                                opacity: { duration: 0.25 },
+                                y: { duration: 0.3, ease: [0.16, 1, 0.3, 1] },
+                                scale: { duration: 0.25 },
+                                default: { duration: 0.18, delay: realIdx * 0.004 },
+                              }}
+                              whileHover={disabled ? {} : {
+                                y: -22,
+                                scale: 1.13,
+                                zIndex: 999,
+                                transition: { duration: 0.14 },
+                              }}
+                              className={`relative flex-shrink-0 ${disabled ? 'pointer-events-none' : 'cursor-pointer'}`}
+                              style={{
+                                zIndex: disabled ? 0 : realIdx,
+                                marginLeft: colIdx > 0 ? '-73px' : '0',
+                              }}
+                              onClick={() => !disabled && handleDrawCard(realIdx)}
+                            >
+                              <div className={`w-20 h-28 sm:w-24 sm:h-36 rounded-lg sm:rounded-xl border-2 overflow-hidden shadow-sm transition-all duration-300 ${
+                                isSuitMismatch
+                                  ? 'border-muted/30'
+                                  : 'border-primary/20 hover:border-primary/50 hover:shadow-lg'
+                              }`}>
+                                <Image
+                                  src={CARD_BACK_IMAGE_URL}
+                                  alt="卡背"
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                        </AnimatePresence>
+                      </div>
+                    ));
+                  })()}
               </div>
 
-              <Button
-                variant="outline"
-                className="rounded-xl"
-                onClick={handleAutoDraw}
-              >
-                <Wand2 className="size-4 mr-2" />
-                自动抽取
-              </Button>
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-xs text-muted-foreground">
+                  点击卡片选取 · 共需 {spread.cardCount} 张
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={handleAutoDraw}
+                >
+                  <Wand2 className="size-4 mr-2" />
+                  自动抽取
+                </Button>
+              </div>
             </motion.div>
           )}
 
@@ -489,27 +622,41 @@ export default function DrawPage() {
             </motion.div>
           )}
 
-          {/* ===== 阶段 7: 完成 ===== */}
+          {/* ===== 阶段 7: 完成 - 牌面归位 ===== */}
           {phase === 'complete' && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
               className="text-center space-y-6 w-full"
             >
-              <div className="flex flex-wrap justify-center gap-2.5 sm:gap-3">
+              {/* 归位动画：整体从上方落下，逐张落定 */}
+              <div className="flex flex-wrap justify-center gap-2 sm:gap-2.5">
                 {drawnCards.map((dc, i) => {
                   const card = MOCK_TAROT_CARDS.find(c => c.id === dc.cardId);
+                  const pos = spread.positions?.[i];
                   return (
-                    <div key={i} className="flex flex-col items-center gap-1">
-                      <div
-                        className={`w-24 h-36 sm:w-28 sm:h-40 rounded-xl border-2 overflow-hidden shadow-sm ${
+                    <motion.div
+                      key={i}
+                      initial={{ y: -60, opacity: 0, scale: 0.85 }}
+                      animate={{ y: 0, opacity: 1, scale: 1 }}
+                      transition={{
+                        delay: i * 0.12,
+                        duration: 0.5,
+                        ease: [0.22, 1, 0.36, 1],
+                      }}
+                      className="flex flex-col items-center gap-1"
+                    >
+                      <motion.div
+                        animate={{ boxShadow: '0 0 16px rgba(184,169,201,0.25)' }}
+                        transition={{ delay: i * 0.12 + 0.35, duration: 0.4 }}
+                        className={`w-20 h-28 sm:w-24 sm:h-36 rounded-xl border-2 overflow-hidden shadow-sm ${
                           dc.isReversed ? 'rotate-180' : ''
                         }`}
                         style={{
                           borderColor: dc.isReversed
-                            ? 'hsl(28 50% 65% / 0.4)'
-                            : 'hsl(110 20% 70% / 0.4)',
+                            ? 'hsl(28 50% 65% / 0.5)'
+                            : 'hsl(110 20% 70% / 0.5)',
                         }}
                       >
                         {card?.imageUrl ? (
@@ -519,43 +666,34 @@ export default function DrawPage() {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center bg-card">
-                            <p className="text-xs font-semibold text-foreground leading-tight">
-                              {card?.nameCn}
-                            </p>
+                          <div className="w-full h-full flex items-center justify-center bg-card">
+                            <p className="text-xs font-semibold">{card?.nameCn}</p>
                           </div>
                         )}
-                      </div>
-                      {card && (
-                        <>
-                          <p className="text-[11px] font-medium text-foreground text-center leading-tight max-w-[96px] sm:max-w-[112px]">
-                            {card.nameCn}
-                          </p>
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] px-1.5 py-0 h-5 ${
-                              dc.isReversed
-                                ? 'border-warning/40 text-warning bg-warning/5'
-                                : 'border-success/40 text-success bg-success/5'
-                            }`}
-                          >
-                            {dc.isReversed ? '逆位' : '正位'}
-                          </Badge>
-                        </>
-                      )}
-                    </div>
+                      </motion.div>
+                      {/* 位置标签 */}
+                      <motion.span
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: i * 0.12 + 0.4 }}
+                        className="text-[10px] text-muted-foreground"
+                      >
+                        {pos?.name || dc.positionName}
+                      </motion.span>
+                    </motion.div>
                   );
                 })}
               </div>
 
-              <Button
-                size="lg"
-                className="rounded-xl gap-2 px-8 h-12"
-                onClick={handleComplete}
+              {/* 自动跳转提示 */}
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0, 0.6, 0] }}
+                transition={{ delay: 1.0, duration: 1, repeat: 1 }}
+                className="text-sm text-muted-foreground"
               >
-                <Sparkles className="size-5" />
-                查看解读
-              </Button>
+                牌已归位，即将进入解读...
+              </motion.p>
             </motion.div>
           )}
 

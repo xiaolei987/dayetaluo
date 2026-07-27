@@ -1,3 +1,10 @@
+/**
+ * 历史占卜详情页 — 路由 /history/:readingId
+ * 
+ * ⚠️ AI 解读渲染在此文件中内联完成（非 HistoryDetailSection.tsx）。
+ * HistoryDetailSection.tsx 已废弃，不被任何文件导入。
+ * 新增/修改 AI 解读模块时，请直接修改本文件内的 interpretation 渲染区。
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -7,60 +14,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { scopedStorage, resolveAppUrl, logger } from '@lark-apaas/client-toolkit-lite';
+import { resolveAppUrl } from '@lark-apaas/client-toolkit-lite';
 import type { IReadingRecord } from '@/types/tarot';
 import { MOCK_TAROT_CARDS } from '@/data/tarotCards';
 import { MOCK_SPREADS } from '@/data/spreads';
-
-const STORAGE_KEY = '__tarot_readings';
-const FAVORITES_KEY = '__tarot_favorites';
-
-function loadReading(id: string): IReadingRecord | null {
-  try {
-    const raw = scopedStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const records: IReadingRecord[] = JSON.parse(raw);
-    return records.find((r) => r.id === id) ?? null;
-  } catch (e) {
-    logger.error('Failed to load reading:', String(e));
-    return null;
-  }
-}
-
-function toggleFavorite(readingId: string): boolean {
-  try {
-    const raw = scopedStorage.getItem(FAVORITES_KEY);
-    const favorites: string[] = raw ? JSON.parse(raw) : [];
-    const idx = favorites.indexOf(readingId);
-    if (idx >= 0) {
-      favorites.splice(idx, 1);
-      scopedStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
-      return false;
-    } else {
-      favorites.push(readingId);
-      scopedStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
-      return true;
-    }
-  } catch (e) {
-    logger.error('Failed to toggle favorite:', String(e));
-    return false;
-  }
-}
-
-function updateReadingFavorite(readingId: string, isFavorite: boolean) {
-  try {
-    const raw = scopedStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const records: IReadingRecord[] = JSON.parse(raw);
-    const idx = records.findIndex((r) => r.id === readingId);
-    if (idx >= 0) {
-      records[idx].isFavorite = isFavorite;
-      scopedStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-    }
-  } catch (e) {
-    logger.error('Failed to update reading favorite:', String(e));
-  }
-}
+import { findReading, toggleFavorite, syncReadingFavorite } from '@/lib/storage';
+import SpreadLayoutSection from '@/pages/ResultPage/SpreadLayoutSection';
 
 const STYLE_LABELS: Record<string, string> = {
   gentle: '温柔治愈风',
@@ -78,6 +37,9 @@ export default function HistoryDetailPage() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     overview: true,
     cardDetails: false,
+    energyFlow: false,
+    positionAnalysis: false,
+    coreConflict: false,
     conclusion: false,
     advice: false,
   });
@@ -87,7 +49,7 @@ export default function HistoryDetailPage() {
       navigate('/history', { replace: true });
       return;
     }
-    const record = loadReading(readingId);
+    const record = findReading(readingId);
     if (!record) {
       toast.error('未找到该占卜记录');
       navigate('/history', { replace: true });
@@ -101,7 +63,7 @@ export default function HistoryDetailPage() {
     if (!readingId) return;
     const newFav = toggleFavorite(readingId);
     setIsFavorite(newFav);
-    updateReadingFavorite(readingId, newFav);
+    syncReadingFavorite(readingId, newFav);
     toast.success(newFav ? '已收藏' : '已取消收藏');
   }, [readingId]);
 
@@ -344,43 +306,51 @@ export default function HistoryDetailPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
-          <Card className="rounded-2xl border-border/50 shadow-sm">
+          <Card className="rounded-2xl border-border/50 shadow-sm overflow-hidden">
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-semibold">牌阵布局</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {reading.cards.map((dc) => {
-                  const card = MOCK_TAROT_CARDS.find((c) => c.id === dc.cardId);
-                  return (
-                    <div
-                      key={`${dc.cardId}-${dc.positionName}`}
-                      className={`rounded-xl border p-3 space-y-1.5 ${
-                        dc.isReversed
-                          ? 'border-warning/30 bg-warning/5'
-                          : 'border-success/30 bg-success/5'
-                      }`}
-                    >
-                      <p className="text-xs font-medium text-muted-foreground truncate">
-                        {dc.positionName}
-                      </p>
-                      <p className="text-sm font-semibold text-foreground truncate">
-                        {card?.nameCn ?? dc.cardId}
-                      </p>
-                      <Badge
-                        variant={dc.isReversed ? 'outline' : 'secondary'}
-                        className={`text-[10px] px-1.5 py-0 h-5 ${
+            <CardContent className="p-0 sm:p-1">
+              {spread ? (
+                <SpreadLayoutSection
+                  spread={spread}
+                  drawnCards={reading.cards}
+                  questionType={reading.questionType || undefined}
+                />
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 p-4">
+                  {reading.cards.map((dc) => {
+                    const card = MOCK_TAROT_CARDS.find((c) => c.id === dc.cardId);
+                    return (
+                      <div
+                        key={`${dc.cardId}-${dc.positionName}`}
+                        className={`rounded-xl border p-3 space-y-1.5 ${
                           dc.isReversed
-                            ? 'border-warning/50 text-warning'
-                            : 'border-success/50 text-success'
+                            ? 'border-warning/30 bg-warning/5'
+                            : 'border-success/30 bg-success/5'
                         }`}
                       >
-                        {dc.isReversed ? '逆位' : '正位'}
-                      </Badge>
-                    </div>
-                  );
-                })}
-              </div>
+                        <p className="text-xs font-medium text-muted-foreground truncate">
+                          {dc.positionName}
+                        </p>
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          {card?.nameCn ?? dc.cardId}
+                        </p>
+                        <Badge
+                          variant={dc.isReversed ? 'outline' : 'secondary'}
+                          className={`text-[10px] px-1.5 py-0 h-5 ${
+                            dc.isReversed
+                              ? 'border-warning/50 text-warning'
+                              : 'border-success/50 text-success'
+                          }`}
+                        >
+                          {dc.isReversed ? '逆位' : '正位'}
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -523,6 +493,78 @@ export default function HistoryDetailPage() {
                 </CardContent>
               )}
             </Card>
+
+            {/* 🌊 能量流动 */}
+            {interpretation.energyFlow ? (
+              <Card className="rounded-2xl border-border/50 shadow-sm">
+                <CardHeader
+                  className="cursor-pointer hover:bg-muted/30 transition-colors rounded-2xl"
+                  onClick={() => setExpandedSections(prev => ({ ...prev, energyFlow: !prev.energyFlow }))}
+                >
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                     🌊 能量流动
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {expandedSections.energyFlow ? '收起' : '展开'}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                {expandedSections.energyFlow && (
+                  <CardContent>
+                    <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">
+                      {interpretation.energyFlow}
+                    </p>
+                  </CardContent>
+                )}
+              </Card>
+            ) : null}
+
+            {/* 📍 牌阵宫位精析 */}
+            {interpretation.positionAnalysis ? (
+              <Card className="rounded-2xl border-border/50 shadow-sm">
+                <CardHeader
+                  className="cursor-pointer hover:bg-muted/30 transition-colors rounded-2xl"
+                  onClick={() => setExpandedSections(prev => ({ ...prev, positionAnalysis: !prev.positionAnalysis }))}
+                >
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                     📍 牌阵宫位精析
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {expandedSections.positionAnalysis ? '收起' : '展开'}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                {expandedSections.positionAnalysis && (
+                  <CardContent>
+                    <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">
+                      {interpretation.positionAnalysis}
+                    </p>
+                  </CardContent>
+                )}
+              </Card>
+            ) : null}
+
+            {/* ⚡ 核心冲突与转化 */}
+            {interpretation.coreConflict ? (
+              <Card className="rounded-2xl border-border/50 shadow-sm">
+                <CardHeader
+                  className="cursor-pointer hover:bg-muted/30 transition-colors rounded-2xl"
+                  onClick={() => setExpandedSections(prev => ({ ...prev, coreConflict: !prev.coreConflict }))}
+                >
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                     ⚡ 核心冲突与转化
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {expandedSections.coreConflict ? '收起' : '展开'}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                {expandedSections.coreConflict && (
+                  <CardContent>
+                    <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">
+                      {interpretation.coreConflict}
+                    </p>
+                  </CardContent>
+                )}
+              </Card>
+            ) : null}
 
             {/* 追问对话历史 */}
             {interpretation.followUpChat.length > 0 && (

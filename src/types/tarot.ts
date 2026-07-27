@@ -20,6 +20,30 @@ export interface ITarotCard {
   uprightMeaning: string;
   /** 逆位详细释义 */
   reversedMeaning: string;
+  /** 幸运数字 (from fatemaster.ai) */
+  luckyNumber?: string;
+  /** 相关颜色 (from fatemaster.ai) */
+  colors?: string[];
+  /** 牌面细节 — 多段落视觉元素解析 */
+  cardDetail?: string[];
+  /** 牌意推演核心信息 */
+  wisdom?: string;
+  /** 象征符号解析 */
+  symbolism?: string;
+  /** 事业发展建议 */
+  careerAdvice?: string;
+  /** 感情关系建议 */
+  loveAdvice?: string;
+  /** 精神成长建议 */
+  growthAdvice?: string;
+  /** 占卜箴言/神谕建议 */
+  divineMessage?: string;
+  /** 分类释义（恋爱婚姻/工作事业/金钱财物） */
+  typeMeanings?: {
+    love?: { upright: string; reversed: string };
+    career?: { upright: string; reversed: string };
+    money?: { upright: string; reversed: string };
+  };
 }
 
 /** 抽牌结果中的单张牌 */
@@ -56,17 +80,26 @@ export interface IChatMessage {
 export interface IInterpretationResult {
   /** 牌面总览 */
   overview: string;
-  /** 牌阵能量流动分析 */
-  energyFlow: string;
   /** 分牌详细解读 */
   cardDetails: ICardInterpretation[];
+  /** 牌阵宫位精析（结合位置解读牌义） */
+  positionAnalysis: string;
+  /** 牌阵能量流动分析 */
+  energyFlow: string;
+  /** 核心冲突与转化（牌间元素/数字/符号的化学反应） */
+  coreConflict: string;
   /** 综合结论 */
   conclusion: string;
   /** 行动建议 */
   advice: string;
+  /** 自我觉察提问 */
+  selfReflection: string;
   /** 追问对话历史 (已弃用，始终为空) */
   followUpChat: IChatMessage[];
 }
+
+/** 问题分类 */
+export type QuestionType = 'love' | 'career' | 'money' | '';
 
 /** 占卜历史记录 */
 export interface IReadingRecord {
@@ -78,6 +111,8 @@ export interface IReadingRecord {
   spreadName: string;
   /** 用户问题 */
   question: string;
+  /** 问题类型 */
+  questionType?: QuestionType;
   /** 抽牌结果 */
   cards: IDrawnCard[];
   /** AI解读结果 */

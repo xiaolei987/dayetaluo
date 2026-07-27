@@ -10,6 +10,7 @@ export default defineConfig({
   },
   build: {
     sourcemap: false,
+    emptyOutDir: true,
   },
   server: {
     proxy: {},

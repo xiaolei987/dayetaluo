@@ -2,11 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Trash2, ChevronRight, Sparkles, ArrowLeft } from 'lucide-react';
-import { logger } from '@lark-apaas/client-toolkit-lite';
-import { scopedStorage } from '@lark-apaas/client-toolkit-lite';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Image } from '@/components/ui/image';
 import {
   AlertDialog,
@@ -21,29 +20,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { IReadingRecord } from '@/types/tarot';
 import { MOCK_TAROT_CARDS } from '@/data/tarotCards';
-
-const STORAGE_KEY = '__tarot_readings';
-
-function loadReadings(): IReadingRecord[] {
-  try {
-    const raw = scopedStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed;
-  } catch (error) {
-    logger.error('Failed to load readings:', String(error));
-    return [];
-  }
-}
-
-function saveReadings(readings: IReadingRecord[]): void {
-  try {
-    scopedStorage.setItem(STORAGE_KEY, JSON.stringify(readings));
-  } catch (error) {
-    logger.error('Failed to save readings:', String(error));
-  }
-}
+import { loadReadings, saveReadings } from '@/lib/storage';
 
 function getCardById(cardId: string) {
   return MOCK_TAROT_CARDS.find((c) => c.id === cardId);
@@ -112,7 +89,7 @@ export default function HistoryPage() {
               <ArrowLeft className="size-4" />
             </Button>
             <div>
-              <h1 className="text-xl font-semibold text-foreground flex items-center gap-2">
+              <h1 className="text-xl font-semibold font-serif text-foreground flex items-center gap-2">
                 <Clock className="size-5 text-primary" />
                 占卜历史
               </h1>
@@ -154,30 +131,41 @@ export default function HistoryPage() {
           )}
         </div>
 
+        {/* 删除单条确认弹窗 */}
+        <AlertDialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
+          <AlertDialogContent className="rounded-2xl">
+            <AlertDialogHeader>
+              <AlertDialogTitle>确认删除这条记录？</AlertDialogTitle>
+              <AlertDialogDescription>删除后将无法恢复</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="rounded-xl" onClick={() => setDeleteId(null)}>取消</AlertDialogCancel>
+              <AlertDialogAction className="rounded-xl bg-destructive hover:bg-destructive/90" onClick={() => deleteId && handleDelete(deleteId)}>
+                确认删除
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         {/* 空状态 */}
         {readings.length === 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-            className="flex flex-col items-center justify-center py-20 text-center"
           >
-            <div className="size-20 rounded-full bg-muted/60 flex items-center justify-center mb-5">
-              <Clock className="size-8 text-muted-foreground/50" />
-            </div>
-            <h3 className="text-base font-medium text-foreground mb-2">
-              还没有占卜记录
-            </h3>
-            <p className="text-sm text-muted-foreground max-w-xs mb-6">
-              开始你的第一次塔罗占卜，记录将保存在这里
-            </p>
-            <Button
-              className="rounded-xl gap-2"
-              onClick={() => navigate('/')}
-            >
-              <Sparkles className="size-4" />
-              开始占卜
-            </Button>
+            <EmptyState
+              variant="card"
+              icon={<Clock className="size-7" />}
+              title="还没有占卜记录"
+              description="开始你的第一次塔罗占卜，记录将保存在这里"
+              action={(
+                <Button className="rounded-xl gap-2" onClick={() => navigate('/')}>
+                  <Sparkles className="size-4" />
+                  开始占卜
+                </Button>
+              )}
+            />
           </motion.div>
         )}
 
@@ -194,7 +182,7 @@ export default function HistoryPage() {
                 transition={{ duration: 0.4, delay: i * 0.04, ease: [0.16, 1, 0.3, 1] }}
               >
                 <Card
-                  className="group cursor-pointer rounded-2xl border border-border/50 bg-card/70 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+                  className="group cursor-pointer rounded-2xl border border-border/50 bg-card/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all overflow-hidden"
                   onClick={() => navigate(`/history/${record.id}`)}
                 >
                   <CardContent className="p-4">
@@ -204,16 +192,30 @@ export default function HistoryPage() {
                         {/* 第一行：牌阵名称 + 时间 */}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-sm font-semibold text-foreground truncate">
+                            <span className="text-sm font-semibold font-serif text-foreground truncate">
                               {record.spreadName}
                             </span>
                             {record.isFavorite && (
-                              <Sparkles className="size-3.5 text-amber-400 shrink-0" />
+                              <Sparkles className="size-3.5 text-warning shrink-0" />
                             )}
                           </div>
-                          <span className="text-xs text-muted-foreground shrink-0">
-                            {formatDate(record.createdAt)}
-                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="text-xs text-muted-foreground">
+                              {formatDate(record.createdAt)}
+                            </span>
+                            {/* 删除按钮 */}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteId(record.id);
+                              }}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
                         </div>
 
                         {/* 第二行：问题摘要 */}

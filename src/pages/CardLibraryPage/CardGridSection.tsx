@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Image } from '@/components/ui/image';
 import { MOCK_TAROT_CARDS } from '@/data/tarotCards';
 import type { ITarotCard } from '@/types/tarot';
@@ -88,19 +89,19 @@ export default function CardGridSection() {
             </div>
 
             <div className="flex items-center gap-1 bg-muted/60 rounded-lg p-0.5">
-              <Button
-                variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                size="icon"
-                className="size-8 rounded-md"
+            <Button
+              variant={viewMode === 'grid' ? 'default' : 'ghost'}
+              size="icon"
+              className="size-8 rounded-lg"
                 onClick={() => setViewMode('grid')}
                 aria-label="宫格视图"
               >
                 <Grid3X3 className="size-4" />
               </Button>
-              <Button
-                variant={viewMode === 'list' ? 'default' : 'ghost'}
-                size="icon"
-                className="size-8 rounded-md"
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="icon"
+              className="size-8 rounded-lg"
                 onClick={() => setViewMode('list')}
                 aria-label="列表视图"
               >
@@ -117,11 +118,12 @@ export default function CardGridSection() {
 
         {/* 空状态 */}
         {filteredCards.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <Search className="size-12 mb-3 opacity-30" />
-            <p className="text-sm">没有找到匹配的卡牌</p>
-            <p className="text-xs mt-1">试试其他关键词或分类</p>
-          </div>
+          <EmptyState
+            variant="card"
+            icon={<Search className="size-7" />}
+            title="没有找到匹配的卡牌"
+            description="试试其他关键词或分类"
+          />
         )}
 
         {/* 宫格视图 */}
@@ -170,7 +172,7 @@ export default function CardGridSection() {
                   </div>
 
                   <CardContent className="p-3 space-y-1">
-                    <p className="text-sm font-semibold text-foreground truncate">
+                    <p className="text-sm font-semibold font-serif text-foreground truncate">
                       {card.nameCn}
                     </p>
                     <p className="text-[11px] text-muted-foreground truncate">
@@ -178,12 +180,13 @@ export default function CardGridSection() {
                     </p>
                     <div className="flex flex-wrap gap-1 pt-1">
                       {card.uprightKeywords.slice(0, 2).map((kw) => (
-                        <span
+                        <Badge
                           key={kw}
-                          className="text-[10px] text-primary/70 bg-primary/5 px-1.5 py-0.5 rounded-full"
+                          variant="secondary"
+                          className="text-[10px] px-1.5 py-0 h-5 rounded-full font-normal"
                         >
                           {kw}
-                        </span>
+                        </Badge>
                       ))}
                     </div>
                   </CardContent>
@@ -227,7 +230,7 @@ export default function CardGridSection() {
                     {/* 信息 */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-semibold text-foreground truncate">
+                        <span className="text-sm font-semibold font-serif text-foreground truncate">
                           {card.nameCn}
                         </span>
                         <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5 py-0 h-5 rounded-full">
@@ -239,12 +242,13 @@ export default function CardGridSection() {
                       </p>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {card.uprightKeywords.slice(0, 3).map((kw) => (
-                          <span
+                          <Badge
                             key={kw}
-                            className="text-[10px] text-primary/70 bg-primary/5 px-1.5 py-0.5 rounded-full"
+                            variant="secondary"
+                            className="text-[10px] px-1.5 py-0 h-5 rounded-full font-normal"
                           >
                             {kw}
-                          </span>
+                          </Badge>
                         ))}
                       </div>
                     </div>

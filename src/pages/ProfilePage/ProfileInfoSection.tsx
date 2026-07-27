@@ -5,35 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from 'sonner';
-import { logger } from '@lark-apaas/client-toolkit-lite';
-import { scopedStorage } from '@lark-apaas/client-toolkit-lite';
 import type { IUserProfile } from '@/types/tarot';
-
-const STORAGE_KEY = '__tarot_userProfile';
-
-function loadProfile(): IUserProfile {
-  try {
-    const raw = scopedStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as IUserProfile;
-      if (parsed && typeof parsed.nickname === 'string') return parsed;
-    }
-  } catch (e) {
-    logger.error('Failed to load profile:', String(e));
-  }
-  return { nickname: '塔罗探索者' };
-}
-
-function saveProfile(profile: IUserProfile) {
-  try {
-    scopedStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
-  } catch (e) {
-    logger.error('Failed to save profile:', String(e));
-  }
-}
+import { loadUserProfile, saveUserProfile } from '@/lib/storage';
 
 export default function ProfileInfoSection() {
-  const [profile, setProfile] = useState<IUserProfile>(loadProfile);
+  const [profile, setProfile] = useState<IUserProfile>(() => loadUserProfile() || { nickname: '塔罗探索者' });
   const [editing, setEditing] = useState(false);
   const [draftNickname, setDraftNickname] = useState(profile.nickname);
   const [draftAvatar, setDraftAvatar] = useState(profile.avatar ?? '');
@@ -60,7 +36,7 @@ export default function ProfileInfoSection() {
       avatar: draftAvatar.trim() || undefined,
     };
     setProfile(updated);
-    saveProfile(updated);
+    saveUserProfile(updated);
     setEditing(false);
     toast.success('个人信息已更新');
   };

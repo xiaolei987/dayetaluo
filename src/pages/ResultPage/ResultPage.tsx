@@ -4,15 +4,12 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Heart, Share2, Bookmark } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { scopedStorage, logger } from '@lark-apaas/client-toolkit-lite';
 import SpreadLayoutSection from '@/pages/ResultPage/SpreadLayoutSection';
 import InterpretationSection from '@/pages/ResultPage/InterpretationSection';
 import type { IReadingRecord, IInterpretationResult } from '@/types/tarot';
 import type { ISpreadConfig } from '@/types/spread';
 import { MOCK_SPREADS } from '@/data/spreads';
-
-const STORAGE_KEY = '__tarot_readings';
-const FAVORITES_KEY = '__tarot_favorites';
+import { findReading, upsertReading, toggleFavorite } from '@/lib/storage';
 
 export default function ResultPage() {
   const { readingId } = useParams<{ readingId: string }>();
@@ -41,23 +38,9 @@ export default function ResultPage() {
     }
 
     // 从 localStorage 加载
-    try {
-      const raw = scopedStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const records: IReadingRecord[] = JSON.parse(raw);
-        const found = records.find((r) => r.id === readingId);
-        if (found) {
-          setRecord(found);
-        } else {
-          setNotFound(true);
-        }
-      } else {
-        setNotFound(true);
-      }
-    } catch (err) {
-      logger.error('Failed to load reading record:', String(err));
-      setNotFound(true);
-    }
+    const found = findReading(readingId);
+    if (found) setRecord(found);
+    else setNotFound(true);
     setLoading(false);
   }, [readingId, location.state]);
 
@@ -71,19 +54,7 @@ export default function ResultPage() {
   const saveRecord = useCallback(
     (updated: IReadingRecord) => {
       setRecord(updated);
-      try {
-        const raw = scopedStorage.getItem(STORAGE_KEY);
-        const records: IReadingRecord[] = raw ? JSON.parse(raw) : [];
-        const idx = records.findIndex((r) => r.id === updated.id);
-        if (idx >= 0) {
-          records[idx] = updated;
-        } else {
-          records.unshift(updated);
-        }
-        scopedStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-      } catch (err) {
-        logger.error('Failed to save reading record:', String(err));
-      }
+      upsertReading(updated);
     },
     [],
   );
@@ -105,21 +76,7 @@ export default function ResultPage() {
     saveRecord(updated);
 
     // 同步更新收藏列表
-    try {
-      const raw = scopedStorage.getItem(FAVORITES_KEY);
-      const favorites: string[] = raw ? JSON.parse(raw) : [];
-      if (updated.isFavorite) {
-        if (!favorites.includes(updated.id)) {
-          favorites.push(updated.id);
-        }
-      } else {
-        const idx = favorites.indexOf(updated.id);
-        if (idx >= 0) favorites.splice(idx, 1);
-      }
-      scopedStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
-    } catch (err) {
-      logger.error('Failed to update favorites:', String(err));
-    }
+    toggleFavorite(updated.id);
 
     toast.success(updated.isFavorite ? '已收藏' : '已取消收藏');
   }, [record, saveRecord]);
@@ -219,8 +176,8 @@ export default function ResultPage() {
         </div>
       </motion.div>
 
-      {/* 用户问题展示 */}
-      {record.question && (
+      {/* 用户问题/类型展示 */}
+      {(record.question || record.questionType) && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -228,8 +185,21 @@ export default function ResultPage() {
           className="max-w-7xl mx-auto px-4 md:px-6"
         >
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/5 border border-primary/10">
-            <span className="text-xs text-muted-foreground">你的问题：</span>
-            <span className="text-sm font-medium text-foreground">{record.question}</span>
+            {record.question && (
+              <>
+                <span className="text-xs text-muted-foreground">你的问题：</span>
+                <span className="text-sm font-medium text-foreground">{record.question}</span>
+              </>
+            )}
+            {record.questionType === 'love' && (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-pink-500/10 text-pink-600 dark:text-pink-400">恋爱婚姻</span>
+            )}
+            {record.questionType === 'career' && (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400">工作事业</span>
+            )}
+            {record.questionType === 'money' && (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">金钱财物</span>
+            )}
           </div>
         </motion.div>
       )}
@@ -240,7 +210,7 @@ export default function ResultPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
       >
-        <SpreadLayoutSection spread={spread} drawnCards={record.cards} />
+        <SpreadLayoutSection spread={spread} drawnCards={record.cards} questionType={record.questionType} />
       </motion.div>
 
       {/* AI 解读区 */}
@@ -254,6 +224,7 @@ export default function ResultPage() {
           spread={spread}
           drawnCards={record.cards}
           question={record.question}
+          questionType={record.questionType}
           interpretation={record.interpretation ?? null}
           onInterpretationChange={handleInterpretationChange}
           isFavorite={record.isFavorite}

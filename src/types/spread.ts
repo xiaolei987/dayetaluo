@@ -1,8 +1,8 @@
-// EXPORTS: ISpreadConfig, ISpreadPosition, SpreadId, SPREADS_META
+// EXPORTS: ISpreadConfig, ISpreadPosition, SpreadId, ISpreadConnection, ISpreadLayoutMeta
 
 /** 牌阵ID */
 export type SpreadId =
-  | 'daily-card'
+  | 'four-seasons'
   | 'time-flow'
   | 'four-elements'
   | 'love-cross'
@@ -10,6 +10,20 @@ export type SpreadId =
   | 'hexagram'
   | 'career'
   | 'celtic-cross';
+
+/** 语义连线：连接两个牌位，表示能量/逻辑流动 */
+export interface ISpreadConnection {
+  /** 起点位置 index */
+  from: number;
+  /** 终点位置 index */
+  to: number;
+  /** 连线类型 */
+  type?: 'solid' | 'dashed';
+  /** 是否带箭头 */
+  arrow?: boolean;
+  /** 语义标签（可选） */
+  label?: string;
+}
 
 /** 牌阵中单个位置的定义 */
 export interface ISpreadPosition {
@@ -21,7 +35,22 @@ export interface ISpreadPosition {
   description: string;
   /** 布局坐标 (百分比, 用于牌阵结果页定位) */
   x: number;
+  /** 布局坐标 (百分比, 用于牌阵结果页定位) */
   y: number;
+  /** 限定花色（四季牌阵、四元素牌阵使用），null=不限 */
+  requiredSuit?: 'major' | 'wands' | 'cups' | 'swords' | 'pentacles';
+}
+
+/** 牌阵布局元数据（用于控制视觉表现） */
+export interface ISpreadLayoutMeta {
+  /** 容器高度（移动端，单位 px） */
+  mobileHeight?: number;
+  /** 容器高度（桌面端，单位 px） */
+  desktopHeight?: number;
+  /** 是否显示语义连线 */
+  showConnections?: boolean;
+  /** 语义连线列表 */
+  connections?: ISpreadConnection[];
 }
 
 /** 牌阵配置 */
@@ -42,91 +71,6 @@ export interface ISpreadConfig {
   positions: ISpreadPosition[];
   /** 简短描述 (用于卡片) */
   shortDesc: string;
+  /** 布局视觉元数据 */
+  layoutMeta?: ISpreadLayoutMeta;
 }
-
-/** 牌阵元数据列表 (不含 positions, 用于首页卡片展示) */
-export interface ISpreadMeta {
-  id: SpreadId;
-  name: string;
-  nameEn: string;
-  cardCount: number;
-  scenario: string;
-  coverImage: string;
-  shortDesc: string;
-}
-
-/** 8种牌阵的元数据 (首页卡片用) */
-export const SPREADS_META: ISpreadMeta[] = [
-  {
-    id: 'daily-card',
-    name: '每日一牌',
-    nameEn: 'Daily Card',
-    cardCount: 1,
-    scenario: '日常运势、快速指引',
-    coverImage: '/images/spread-daily-card.webp',
-    shortDesc: '抽取一张牌，获得今日的指引与启示',
-  },
-  {
-    id: 'time-flow',
-    name: '时间流三牌阵',
-    nameEn: 'Time Flow',
-    cardCount: 3,
-    scenario: '过去-现在-未来',
-    coverImage: '/images/spread-time-flow.webp',
-    shortDesc: '揭示过去的影响、现在的状态与未来的趋势',
-  },
-  {
-    id: 'four-elements',
-    name: '四元素牌阵',
-    nameEn: 'Four Elements',
-    cardCount: 4,
-    scenario: '火-水-风-土四维度',
-    coverImage: '/images/spread-four-elements.webp',
-    shortDesc: '从火水风土四个维度全面分析你的问题',
-  },
-  {
-    id: 'love-cross',
-    name: '爱情十字牌阵',
-    nameEn: 'Love Cross',
-    cardCount: 5,
-    scenario: '现状、对方想法、关系阻碍、发展趋势、结果指引',
-    coverImage: '/images/spread-love-cross.webp',
-    shortDesc: '深入剖析感情现状，看清关系走向',
-  },
-  {
-    id: 'two-choices',
-    name: '二择一牌阵',
-    nameEn: 'Two Choices',
-    cardCount: 6,
-    scenario: '两难决策分析',
-    coverImage: '/images/spread-two-choices.webp',
-    shortDesc: '面对两难抉择时，帮你理清利弊与方向',
-  },
-  {
-    id: 'hexagram',
-    name: '六芒星牌阵',
-    nameEn: 'Hexagram',
-    cardCount: 7,
-    scenario: '深度问题剖析',
-    coverImage: '/images/spread-hexagram.webp',
-    shortDesc: '七张牌深度剖析，揭示问题的核心与根源',
-  },
-  {
-    id: 'career',
-    name: '事业发展牌阵',
-    nameEn: 'Career',
-    cardCount: 6,
-    scenario: '职业规划分析',
-    coverImage: '/images/spread-career.webp',
-    shortDesc: '分析职业现状、机遇与挑战，指引事业方向',
-  },
-  {
-    id: 'celtic-cross',
-    name: '凯尔特十字',
-    nameEn: 'Celtic Cross',
-    cardCount: 10,
-    scenario: '全面深度占卜',
-    coverImage: '/images/spread-celtic-cross.webp',
-    shortDesc: '最经典的塔罗牌阵，全方位深度解读',
-  },
-];
